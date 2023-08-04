@@ -1,0 +1,150 @@
+<html>
+<head>
+<title>_safearray.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_safearray.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;SAFEARRAY api functions, data types, and constants.&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">*</span>
+<span class="s2">from </span><span class="s1">ctypes.wintypes </span><span class="s2">import </span><span class="s1">*</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s1">GUID</span>
+
+<span class="s3">################################################################</span>
+<span class="s3">##if __debug__:</span>
+<span class="s3">##    from ctypeslib.dynamic_module import include</span>
+<span class="s3">##    include(&quot;&quot;&quot;\</span>
+<span class="s3">##    #define UNICODE</span>
+<span class="s3">##    #define NO_STRICT</span>
+<span class="s3">##    #include &lt;windows.h&gt;</span>
+<span class="s3">##    &quot;&quot;&quot;,</span>
+<span class="s3">##            persist=True)</span>
+
+<span class="s3">################################################################</span>
+
+<span class="s1">VARTYPE = c_ushort</span>
+<span class="s1">PVOID = c_void_p</span>
+<span class="s1">USHORT = c_ushort</span>
+
+<span class="s1">_oleaut32 = WinDLL(</span><span class="s4">&quot;oleaut32&quot;</span><span class="s1">)</span>
+
+<span class="s2">class </span><span class="s1">tagSAFEARRAYBOUND(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s4">'cElements'</span><span class="s2">, </span><span class="s1">DWORD)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'lLbound'</span><span class="s2">, </span><span class="s1">LONG)</span><span class="s2">,</span>
+<span class="s1">]</span>
+<span class="s1">SAFEARRAYBOUND = tagSAFEARRAYBOUND</span>
+
+<span class="s2">class </span><span class="s1">tagSAFEARRAY(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s4">'cDims'</span><span class="s2">, </span><span class="s1">USHORT)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'fFeatures'</span><span class="s2">, </span><span class="s1">USHORT)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'cbElements'</span><span class="s2">, </span><span class="s1">DWORD)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'cLocks'</span><span class="s2">, </span><span class="s1">DWORD)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'pvData'</span><span class="s2">, </span><span class="s1">PVOID)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'rgsabound'</span><span class="s2">, </span><span class="s1">SAFEARRAYBOUND * </span><span class="s5">1</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">]</span>
+<span class="s1">SAFEARRAY = tagSAFEARRAY</span>
+
+<span class="s1">SafeArrayAccessData = _oleaut32.SafeArrayAccessData</span>
+<span class="s1">SafeArrayAccessData.restype = HRESULT</span>
+<span class="s3"># Last parameter manually changed from POINTER(c_void_p) to c_void_p:</span>
+<span class="s1">SafeArrayAccessData.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">c_void_p]</span>
+
+<span class="s1">SafeArrayCreateVectorEx = _oleaut32.SafeArrayCreateVectorEx</span>
+<span class="s1">SafeArrayCreateVectorEx.restype = POINTER(SAFEARRAY)</span>
+<span class="s1">SafeArrayCreateVectorEx.argtypes = [VARTYPE</span><span class="s2">, </span><span class="s1">LONG</span><span class="s2">, </span><span class="s1">DWORD</span><span class="s2">, </span><span class="s1">PVOID]</span>
+
+<span class="s1">SafeArrayCreateEx = _oleaut32.SafeArrayCreateEx</span>
+<span class="s1">SafeArrayCreateEx.restype = POINTER(SAFEARRAY)</span>
+<span class="s1">SafeArrayCreateEx.argtypes = [VARTYPE</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">POINTER(SAFEARRAYBOUND)</span><span class="s2">, </span><span class="s1">PVOID]</span>
+
+<span class="s1">SafeArrayCreate = _oleaut32.SafeArrayCreate</span>
+<span class="s1">SafeArrayCreate.restype = POINTER(SAFEARRAY)</span>
+<span class="s1">SafeArrayCreate.argtypes = [VARTYPE</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">POINTER(SAFEARRAYBOUND)]</span>
+
+<span class="s1">SafeArrayUnaccessData = _oleaut32.SafeArrayUnaccessData</span>
+<span class="s1">SafeArrayUnaccessData.restype = HRESULT</span>
+<span class="s1">SafeArrayUnaccessData.argtypes = [POINTER(SAFEARRAY)]</span>
+
+<span class="s1">_SafeArrayGetVartype = _oleaut32.SafeArrayGetVartype</span>
+<span class="s1">_SafeArrayGetVartype.restype = HRESULT</span>
+<span class="s1">_SafeArrayGetVartype.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">POINTER(VARTYPE)]</span>
+<span class="s2">def </span><span class="s1">SafeArrayGetVartype(pa):</span>
+    <span class="s1">result = VARTYPE()</span>
+    <span class="s1">_SafeArrayGetVartype(pa</span><span class="s2">, </span><span class="s1">result)</span>
+    <span class="s2">return </span><span class="s1">result.value</span>
+
+<span class="s1">SafeArrayGetElement = _oleaut32.SafeArrayGetElement</span>
+<span class="s1">SafeArrayGetElement.restype = HRESULT</span>
+<span class="s1">SafeArrayGetElement.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">POINTER(LONG)</span><span class="s2">, </span><span class="s1">c_void_p]</span>
+
+<span class="s1">SafeArrayDestroy = _oleaut32.SafeArrayDestroy</span>
+<span class="s1">SafeArrayDestroy.restype = HRESULT</span>
+<span class="s1">SafeArrayDestroy.argtypes = [POINTER(SAFEARRAY)]</span>
+
+<span class="s1">SafeArrayCreateVector = _oleaut32.SafeArrayCreateVector</span>
+<span class="s1">SafeArrayCreateVector.restype = POINTER(SAFEARRAY)</span>
+<span class="s1">SafeArrayCreateVector.argtypes = [VARTYPE</span><span class="s2">, </span><span class="s1">LONG</span><span class="s2">, </span><span class="s1">DWORD]</span>
+
+<span class="s1">SafeArrayDestroyData = _oleaut32.SafeArrayDestroyData</span>
+<span class="s1">SafeArrayDestroyData.restype = HRESULT</span>
+<span class="s1">SafeArrayDestroyData.argtypes = [POINTER(SAFEARRAY)]</span>
+
+<span class="s1">SafeArrayGetDim = _oleaut32.SafeArrayGetDim</span>
+<span class="s1">SafeArrayGetDim.restype = UINT</span>
+<span class="s1">SafeArrayGetDim.argtypes = [POINTER(SAFEARRAY)]</span>
+
+<span class="s1">_SafeArrayGetLBound = _oleaut32.SafeArrayGetLBound</span>
+<span class="s1">_SafeArrayGetLBound.restype = HRESULT</span>
+<span class="s1">_SafeArrayGetLBound.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">UINT</span><span class="s2">, </span><span class="s1">POINTER(LONG)]</span>
+<span class="s2">def </span><span class="s1">SafeArrayGetLBound(pa</span><span class="s2">, </span><span class="s1">dim):</span>
+    <span class="s1">result = LONG()</span>
+    <span class="s1">_SafeArrayGetLBound(pa</span><span class="s2">, </span><span class="s1">dim</span><span class="s2">, </span><span class="s1">result)</span>
+    <span class="s2">return </span><span class="s1">result.value</span>
+
+<span class="s1">_SafeArrayGetUBound = _oleaut32.SafeArrayGetUBound</span>
+<span class="s1">_SafeArrayGetUBound.restype = HRESULT</span>
+<span class="s1">_SafeArrayGetUBound.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">UINT</span><span class="s2">, </span><span class="s1">POINTER(LONG)]</span>
+<span class="s2">def </span><span class="s1">SafeArrayGetUBound(pa</span><span class="s2">, </span><span class="s1">dim):</span>
+    <span class="s1">result = LONG()</span>
+    <span class="s1">_SafeArrayGetUBound(pa</span><span class="s2">, </span><span class="s1">dim</span><span class="s2">, </span><span class="s1">result)</span>
+    <span class="s2">return </span><span class="s1">result.value</span>
+
+
+<span class="s1">SafeArrayLock = _oleaut32.SafeArrayLock</span>
+<span class="s1">SafeArrayLock.restype = HRESULT</span>
+<span class="s1">SafeArrayLock.argtypes = [POINTER(SAFEARRAY)]</span>
+<span class="s1">SafeArrayPtrOfIndex = _oleaut32.SafeArrayPtrOfIndex</span>
+<span class="s1">SafeArrayPtrOfIndex.restype = HRESULT</span>
+<span class="s3"># Last parameter manually changed from POINTER(c_void_p) to c_void_p:</span>
+<span class="s1">SafeArrayPtrOfIndex.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">POINTER(LONG)</span><span class="s2">, </span><span class="s1">c_void_p]</span>
+<span class="s1">SafeArrayUnlock = _oleaut32.SafeArrayUnlock</span>
+<span class="s1">SafeArrayUnlock.restype = HRESULT</span>
+<span class="s1">SafeArrayUnlock.argtypes = [POINTER(SAFEARRAY)]</span>
+<span class="s1">_SafeArrayGetIID = _oleaut32.SafeArrayGetIID</span>
+<span class="s1">_SafeArrayGetIID.restype = HRESULT</span>
+<span class="s1">_SafeArrayGetIID.argtypes = [POINTER(SAFEARRAY)</span><span class="s2">, </span><span class="s1">POINTER(GUID)]</span>
+<span class="s2">def </span><span class="s1">SafeArrayGetIID(pa):</span>
+    <span class="s1">result = GUID()</span>
+    <span class="s1">_SafeArrayGetIID(pa</span><span class="s2">, </span><span class="s1">result)</span>
+    <span class="s2">return </span><span class="s1">result</span>
+<span class="s1">SafeArrayDestroyDescriptor = _oleaut32.SafeArrayDestroyDescriptor</span>
+<span class="s1">SafeArrayDestroyDescriptor.restype = HRESULT</span>
+<span class="s1">SafeArrayDestroyDescriptor.argtypes = [POINTER(SAFEARRAY)]</span>
+</pre>
+</body>
+</html>

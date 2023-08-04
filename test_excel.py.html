@@ -1,0 +1,151 @@
+<html>
+<head>
+<title>test_excel.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_excel.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># -*- coding: latin-1 -*-</span>
+<span class="s2">from </span><span class="s1">__future__ </span><span class="s2">import </span><span class="s1">print_function</span>
+
+<span class="s2">import </span><span class="s1">datetime</span>
+<span class="s2">import </span><span class="s1">unittest</span>
+
+<span class="s2">from </span><span class="s1">comtypes.client </span><span class="s2">import </span><span class="s1">CreateObject</span><span class="s2">, </span><span class="s1">GetModule</span>
+
+<span class="s0">################################################################</span>
+<span class="s0">#</span>
+<span class="s0"># TODO:</span>
+<span class="s0">#</span>
+<span class="s0"># It seems bad that only external test like this</span>
+<span class="s0"># can verify the behavior of `comtypes` implementation.</span>
+<span class="s0"># Find a different built-in win32 API to use.</span>
+<span class="s0">#</span>
+<span class="s0">################################################################</span>
+
+<span class="s2">try</span><span class="s1">:</span>
+    <span class="s1">GetModule((</span><span class="s3">&quot;{00020813-0000-0000-C000-000000000046}&quot;</span><span class="s2">,</span><span class="s1">))  </span><span class="s0"># Excel libUUID</span>
+    <span class="s2">from </span><span class="s1">comtypes.gen.Excel </span><span class="s2">import </span><span class="s1">xlRangeValueDefault</span>
+    <span class="s1">IMPORT_FAILED = </span><span class="s2">False</span>
+<span class="s2">except </span><span class="s1">(ImportError</span><span class="s2">, </span><span class="s1">OSError):</span>
+    <span class="s1">IMPORT_FAILED = </span><span class="s2">True</span>
+
+
+<span class="s2">class </span><span class="s1">BaseBindTest(object):</span>
+    <span class="s0"># `dynamic = True/False` must be defined in subclasses!</span>
+
+    <span class="s2">def </span><span class="s1">setUp(self):</span>
+        <span class="s1">self.xl = CreateObject(</span><span class="s3">&quot;Excel.Application&quot;</span><span class="s2">, </span><span class="s1">dynamic=self.dynamic)</span>
+
+    <span class="s2">def </span><span class="s1">tearDown(self):</span>
+        <span class="s0"># Close all open workbooks without saving, then quit excel.</span>
+        <span class="s2">for </span><span class="s1">wb </span><span class="s2">in </span><span class="s1">self.xl.Workbooks:</span>
+            <span class="s1">wb.Close(</span><span class="s4">0</span><span class="s1">)</span>
+        <span class="s1">self.xl.Quit()</span>
+        <span class="s2">del </span><span class="s1">self.xl</span>
+
+    <span class="s2">def </span><span class="s1">test(self):</span>
+        <span class="s1">xl = self.xl</span>
+        <span class="s1">xl.Visible = </span><span class="s4">0</span>
+        <span class="s1">self.assertEqual(xl.Visible</span><span class="s2">, False</span><span class="s1">)  </span><span class="s0"># type: ignore</span>
+        <span class="s1">xl.Visible = </span><span class="s4">1</span>
+        <span class="s1">self.assertEqual(xl.Visible</span><span class="s2">, True</span><span class="s1">)  </span><span class="s0"># type: ignore</span>
+
+        <span class="s1">wb = xl.Workbooks.Add()</span>
+
+        <span class="s0"># Test with empty-tuple argument</span>
+        <span class="s1">xl.Range[</span><span class="s3">&quot;A1&quot;</span><span class="s2">, </span><span class="s3">&quot;C1&quot;</span><span class="s1">].Value[()] = (</span><span class="s4">10</span><span class="s2">,</span><span class="s3">&quot;20&quot;</span><span class="s2">,</span><span class="s4">31.4</span><span class="s1">)  </span><span class="s0"># XXX: in Python &gt;= 3.8.x, cannot set values to A1:C1</span>
+        <span class="s1">xl.Range[</span><span class="s3">&quot;A2:C2&quot;</span><span class="s1">].Value[()] = (</span><span class="s3">'x'</span><span class="s2">,</span><span class="s3">'y'</span><span class="s2">,</span><span class="s3">'z'</span><span class="s1">)</span>
+        <span class="s0"># Test with empty slice argument</span>
+        <span class="s1">xl.Range[</span><span class="s3">&quot;A3:C3&quot;</span><span class="s1">].Value[:] = (</span><span class="s3">'3'</span><span class="s2">,</span><span class="s3">'2'</span><span class="s2">,</span><span class="s3">'1'</span><span class="s1">)</span>
+        <span class="s0"># not implemented:</span>
+        <span class="s0">#     xl.Range[&quot;A4:C4&quot;].Value = (&quot;3&quot;, &quot;2&quot; ,&quot;1&quot;)</span>
+
+        <span class="s0"># call property to retrieve value</span>
+        <span class="s1">expected_values = ((</span><span class="s4">10.0</span><span class="s2">, </span><span class="s4">20.0</span><span class="s2">, </span><span class="s4">31.4</span><span class="s1">)</span><span class="s2">,</span>
+                           <span class="s1">(</span><span class="s3">&quot;x&quot;</span><span class="s2">, </span><span class="s3">&quot;y&quot;</span><span class="s2">, </span><span class="s3">&quot;z&quot;</span><span class="s1">)</span><span class="s2">,</span>
+                           <span class="s1">(</span><span class="s4">3.0</span><span class="s2">, </span><span class="s4">2.0</span><span class="s2">, </span><span class="s4">1.0</span><span class="s1">))</span>
+        <span class="s0"># XXX: in Python &gt;= 3.8.x, fails below</span>
+        <span class="s1">self.assertEqual(xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">].Value()</span><span class="s2">,</span>
+                         <span class="s1">expected_values)</span>
+        <span class="s0"># index with empty tuple</span>
+        <span class="s1">self.assertEqual(xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">].Value[()]</span><span class="s2">,</span>
+                         <span class="s1">expected_values)</span>
+        <span class="s0"># index with empty slice</span>
+        <span class="s1">self.assertEqual(xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">].Value[:]</span><span class="s2">,</span>
+                         <span class="s1">expected_values)</span>
+        <span class="s1">self.assertEqual(xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">].Value[xlRangeValueDefault]</span><span class="s2">,</span>
+                         <span class="s1">expected_values)</span>
+        <span class="s1">self.assertEqual(xl.Range[</span><span class="s3">&quot;A1&quot;</span><span class="s2">, </span><span class="s3">&quot;C3&quot;</span><span class="s1">].Value[()]</span><span class="s2">,</span>
+                         <span class="s1">expected_values)</span>
+
+        <span class="s0"># Test for iteration support in &quot;Range&quot; interface</span>
+        <span class="s1">iter(xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual([c.Value() </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">xl.Range[</span><span class="s3">&quot;A1:C3&quot;</span><span class="s1">]]</span><span class="s2">,</span>
+                             <span class="s1">[</span><span class="s4">10.0</span><span class="s2">, </span><span class="s4">20.0</span><span class="s2">, </span><span class="s4">31.4</span><span class="s2">,</span>
+                              <span class="s3">&quot;x&quot;</span><span class="s2">, </span><span class="s3">&quot;y&quot;</span><span class="s2">, </span><span class="s3">&quot;z&quot;</span><span class="s2">,</span>
+                              <span class="s4">3.0</span><span class="s2">, </span><span class="s4">2.0</span><span class="s2">, </span><span class="s4">1.0</span><span class="s1">])</span>
+
+        <span class="s0"># With pywin32, one could write xl.Cells(a, b)</span>
+        <span class="s0"># With comtypes, one must write xl.Cells.Item(1, b)</span>
+
+        <span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range(</span><span class="s4">20</span><span class="s1">):</span>
+            <span class="s1">val = </span><span class="s3">&quot;Hi %d&quot; </span><span class="s1">% i</span>
+            <span class="s1">xl.Cells.Item[i+</span><span class="s4">1</span><span class="s2">,</span><span class="s1">i+</span><span class="s4">1</span><span class="s1">].Value[()] = val</span>
+            <span class="s1">self.assertEqual(xl.Cells.Item[i+</span><span class="s4">1</span><span class="s2">, </span><span class="s1">i+</span><span class="s4">1</span><span class="s1">].Value[()]</span><span class="s2">, </span><span class="s1">val)</span>
+
+        <span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range(</span><span class="s4">20</span><span class="s1">):</span>
+            <span class="s1">val = </span><span class="s3">&quot;Hi %d&quot; </span><span class="s1">% i</span>
+            <span class="s1">xl.Cells(i+</span><span class="s4">1</span><span class="s2">,</span><span class="s1">i+</span><span class="s4">1</span><span class="s1">).Value[()] = val</span>
+            <span class="s1">self.assertEqual(xl.Cells(i+</span><span class="s4">1</span><span class="s2">, </span><span class="s1">i+</span><span class="s4">1</span><span class="s1">).Value[()]</span><span class="s2">, </span><span class="s1">val)</span>
+
+        <span class="s0"># test dates out with Excel</span>
+        <span class="s1">xl.Range[</span><span class="s3">&quot;A5&quot;</span><span class="s1">].Value[()] = </span><span class="s3">&quot;Excel time&quot;</span>
+        <span class="s1">xl.Range[</span><span class="s3">&quot;B5&quot;</span><span class="s1">].Formula = </span><span class="s3">&quot;=Now()&quot;</span>
+        <span class="s1">self.assertEqual(xl.Cells.Item[</span><span class="s4">5</span><span class="s2">,</span><span class="s4">2</span><span class="s1">].Formula</span><span class="s2">, </span><span class="s3">&quot;=NOW()&quot;</span><span class="s1">)</span>
+
+        <span class="s1">xl.Range[</span><span class="s3">&quot;A6&quot;</span><span class="s1">].Calculate()</span>
+        <span class="s1">excel_time = xl.Range[</span><span class="s3">&quot;B5&quot;</span><span class="s1">].Value[()]</span>
+        <span class="s1">self.assertEqual(type(excel_time)</span><span class="s2">, </span><span class="s1">datetime.datetime)</span>
+        <span class="s1">python_time = datetime.datetime.now()</span>
+
+        <span class="s1">self.assertTrue(python_time &gt;= excel_time)</span>
+        <span class="s1">self.assertTrue(python_time - excel_time &lt; datetime.timedelta(seconds=</span><span class="s4">1</span><span class="s1">))</span>
+
+        <span class="s0"># some random code, grabbed from c.l.p</span>
+        <span class="s1">sh = wb.Worksheets[</span><span class="s4">1</span><span class="s1">]</span>
+
+        <span class="s1">sh.Cells.Item[</span><span class="s4">1</span><span class="s2">,</span><span class="s4">1</span><span class="s1">].Value[()] = </span><span class="s3">&quot;Hello World!&quot;</span>
+        <span class="s1">sh.Cells.Item[</span><span class="s4">3</span><span class="s2">,</span><span class="s4">3</span><span class="s1">].Value[()] = </span><span class="s3">&quot;Hello World!&quot;</span>
+        <span class="s1">sh.Range[sh.Cells.Item[</span><span class="s4">1</span><span class="s2">,</span><span class="s4">1</span><span class="s1">]</span><span class="s2">,</span><span class="s1">sh.Cells.Item[</span><span class="s4">3</span><span class="s2">,</span><span class="s4">3</span><span class="s1">]].Copy(sh.Cells.Item[</span><span class="s4">4</span><span class="s2">,</span><span class="s4">1</span><span class="s1">])</span>
+        <span class="s1">sh.Range[sh.Cells.Item[</span><span class="s4">4</span><span class="s2">,</span><span class="s4">1</span><span class="s1">]</span><span class="s2">,</span><span class="s1">sh.Cells.Item[</span><span class="s4">6</span><span class="s2">,</span><span class="s4">3</span><span class="s1">]].Select()</span>
+
+
+<span class="s1">@unittest.skipIf(IMPORT_FAILED</span><span class="s2">, </span><span class="s3">&quot;This depends on Excel.&quot;</span><span class="s1">)</span>
+<span class="s1">@unittest.skip(</span><span class="s3">&quot;There is difference of `Range.Value` behavior &quot;</span>
+    <span class="s3">&quot;between Python &gt;= 3.8.x and Python &lt;= 3.7.x.&quot;</span><span class="s1">)</span>
+<span class="s2">class </span><span class="s1">Test_EarlyBind(BaseBindTest</span><span class="s2">, </span><span class="s1">unittest.TestCase):</span>
+    <span class="s1">dynamic = </span><span class="s2">False</span>
+
+
+<span class="s1">@unittest.skipIf(IMPORT_FAILED</span><span class="s2">, </span><span class="s3">&quot;This depends on Excel.&quot;</span><span class="s1">)</span>
+<span class="s2">class </span><span class="s1">Test_LateBind(BaseBindTest</span><span class="s2">, </span><span class="s1">unittest.TestCase):</span>
+    <span class="s1">dynamic = </span><span class="s2">True</span>
+
+
+<span class="s2">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<html>
+<head>
+<title>viewobject.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+viewobject.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># XXX need to find out what the share from comtypes.dataobject.</span>
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">*</span>
+<span class="s2">from </span><span class="s1">ctypes.wintypes </span><span class="s2">import </span><span class="s1">_RECTL</span><span class="s2">, </span><span class="s1">SIZEL</span><span class="s2">, </span><span class="s1">HDC</span><span class="s2">, </span><span class="s1">tagRECT</span><span class="s2">, </span><span class="s1">tagPOINT</span>
+
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">COMMETHOD</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">GUID</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">IUnknown</span>
+
+<span class="s2">class </span><span class="s1">tagPALETTEENTRY(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s3">'peRed'</span><span class="s2">, </span><span class="s1">c_ubyte)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'peGreen'</span><span class="s2">, </span><span class="s1">c_ubyte)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'peBlue'</span><span class="s2">, </span><span class="s1">c_ubyte)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'peFlags'</span><span class="s2">, </span><span class="s1">c_ubyte)</span><span class="s2">,</span>
+        <span class="s1">]</span>
+<span class="s2">assert </span><span class="s1">sizeof(tagPALETTEENTRY) == </span><span class="s4">4</span><span class="s2">, </span><span class="s1">sizeof(tagPALETTEENTRY)</span>
+<span class="s2">assert </span><span class="s1">alignment(tagPALETTEENTRY) == </span><span class="s4">1</span><span class="s2">, </span><span class="s1">alignment(tagPALETTEENTRY)</span>
+
+<span class="s2">class </span><span class="s1">tagLOGPALETTE(Structure):</span>
+    <span class="s1">_pack_ = </span><span class="s4">2</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s3">'palVersion'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'palNumEntries'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'palPalEntry'</span><span class="s2">, </span><span class="s1">POINTER(tagPALETTEENTRY))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+<span class="s2">assert </span><span class="s1">sizeof(tagLOGPALETTE) == </span><span class="s4">8</span><span class="s2">, </span><span class="s1">sizeof(tagLOGPALETTE)</span>
+<span class="s2">assert </span><span class="s1">alignment(tagLOGPALETTE) == </span><span class="s4">2</span><span class="s2">, </span><span class="s1">alignment(tagLOGPALETTE)</span>
+
+<span class="s2">class </span><span class="s1">tagDVTARGETDEVICE(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s3">'tdSize'</span><span class="s2">, </span><span class="s1">c_ulong)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'tdDriverNameOffset'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'tdDeviceNameOffset'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'tdPortNameOffset'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'tdExtDevmodeOffset'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'tdData'</span><span class="s2">, </span><span class="s1">POINTER(c_ubyte))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+<span class="s2">assert </span><span class="s1">sizeof(tagDVTARGETDEVICE) == </span><span class="s4">16</span><span class="s2">, </span><span class="s1">sizeof(tagDVTARGETDEVICE)</span>
+<span class="s2">assert </span><span class="s1">alignment(tagDVTARGETDEVICE) == </span><span class="s4">4</span><span class="s2">, </span><span class="s1">alignment(tagDVTARGETDEVICE)</span>
+
+<span class="s2">class </span><span class="s1">tagExtentInfo(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s3">'cb'</span><span class="s2">, </span><span class="s1">c_ulong)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'dwExtentMode'</span><span class="s2">, </span><span class="s1">c_ulong)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s3">'sizelProposed'</span><span class="s2">, </span><span class="s1">SIZEL)</span><span class="s2">,</span>
+        <span class="s1">]</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s1">self.cb = sizeof(self)</span>
+        <span class="s1">super(tagExtentInfo</span><span class="s2">, </span><span class="s1">self).__init__(*args</span><span class="s2">, </span><span class="s1">**kw)</span>
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s1">size = (self.sizelProposed.cx</span><span class="s2">, </span><span class="s1">self.sizelProposed.cy)</span>
+        <span class="s2">return </span><span class="s3">&quot;&lt;ExtentInfo(mode=%s, size=%s) at %x&gt;&quot; </span><span class="s1">% (self.dwExtentMode</span><span class="s2">,</span>
+                                                         <span class="s1">size</span><span class="s2">,</span>
+                                                         <span class="s1">id(self))</span>
+<span class="s2">assert </span><span class="s1">sizeof(tagExtentInfo) == </span><span class="s4">16</span><span class="s2">, </span><span class="s1">sizeof(tagExtentInfo)</span>
+<span class="s2">assert </span><span class="s1">alignment(tagExtentInfo) == </span><span class="s4">4</span><span class="s2">, </span><span class="s1">alignment(tagExtentInfo)</span>
+<span class="s1">DVEXTENTINFO = tagExtentInfo</span>
+
+<span class="s1">IAdviseSink = IUnknown </span><span class="s0"># fake the interface</span>
+
+<span class="s2">class </span><span class="s1">IViewObject(IUnknown):</span>
+    <span class="s1">_case_insensitive_ = </span><span class="s2">False</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">'{0000010D-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'Draw'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwDrawAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lindex' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_void_p</span><span class="s2">, </span><span class="s3">'pvAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagDVTARGETDEVICE)</span><span class="s2">, </span><span class="s3">'ptd' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">HDC</span><span class="s2">, </span><span class="s3">'hdcTargetDev' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">HDC</span><span class="s2">, </span><span class="s3">'hdcDraw' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(_RECTL)</span><span class="s2">, </span><span class="s3">'lprcBounds' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(_RECTL)</span><span class="s2">, </span><span class="s3">'lprcWBounds' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_void_p</span><span class="s2">, </span><span class="s3">'pfnContinue' </span><span class="s1">)</span><span class="s2">, </span><span class="s0"># a pointer to a callback function</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwContinue'</span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetColorSet'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwDrawAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lindex' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_void_p</span><span class="s2">, </span><span class="s3">'pvAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagDVTARGETDEVICE)</span><span class="s2">, </span><span class="s3">'ptd' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">HDC</span><span class="s2">, </span><span class="s3">'hicTargetDev' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(POINTER(tagLOGPALETTE))</span><span class="s2">, </span><span class="s3">'ppColorSet' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'Freeze'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwDrawAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lindex' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_void_p</span><span class="s2">, </span><span class="s3">'pvAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pdwFreeze' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'Unfreeze'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwFreeze' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'SetAdvise'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'advf' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IAdviseSink)</span><span class="s2">, </span><span class="s3">'pAdvSink' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetAdvise'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pdwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pAdvf' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(POINTER(IAdviseSink))</span><span class="s2">, </span><span class="s3">'ppAdvSink' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IViewObject2(IViewObject):</span>
+    <span class="s1">_case_insensitive_ = </span><span class="s2">False</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">'{00000127-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetExtent'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwDrawAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lindex' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagDVTARGETDEVICE)</span><span class="s2">, </span><span class="s3">'ptd' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(SIZEL)</span><span class="s2">, </span><span class="s3">'lpsizel' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IViewObjectEx(IViewObject2):</span>
+    <span class="s1">_case_insensitive_ = </span><span class="s2">False</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">'{3AF24292-0C96-11CE-A0CF-00AA00600AB8}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetRect'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(_RECTL)</span><span class="s2">, </span><span class="s3">'pRect' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetViewStatus'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pdwStatus' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'QueryHitPoint'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagRECT)</span><span class="s2">, </span><span class="s3">'pRectBounds' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">tagPOINT</span><span class="s2">, </span><span class="s3">'ptlLoc' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lCloseHint' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pHitResult' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'QueryHitRect'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagRECT)</span><span class="s2">, </span><span class="s3">'pRectBounds' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagRECT)</span><span class="s2">, </span><span class="s3">'pRectLoc' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lCloseHint' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s3">'pHitResult' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s3">'GetNaturalExtent'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s3">'dwAspect' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s3">'lindex' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagDVTARGETDEVICE)</span><span class="s2">, </span><span class="s3">'ptd' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">HDC</span><span class="s2">, </span><span class="s3">'hicTargetDev' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagExtentInfo)</span><span class="s2">, </span><span class="s3">'pExtentInfo' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s3">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(SIZEL)</span><span class="s2">, </span><span class="s3">'pSizel' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+
+<span class="s1">DVASPECT = c_int </span><span class="s0"># enum</span>
+<span class="s1">DVASPECT_CONTENT    = </span><span class="s4">1</span>
+<span class="s1">DVASPECT_THUMBNAIL  = </span><span class="s4">2</span>
+<span class="s1">DVASPECT_ICON       = </span><span class="s4">4</span>
+<span class="s1">DVASPECT_DOCPRINT   = </span><span class="s4">8 </span>
+
+<span class="s1">DVASPECT2 = c_int </span><span class="s0"># enum</span>
+<span class="s1">DVASPECT_OPAQUE = </span><span class="s4">16</span>
+<span class="s1">DVASPECT_TRANSPARENT = </span><span class="s4">32</span>
+
+<span class="s1">DVEXTENTMODE = c_int </span><span class="s0"># enum</span>
+<span class="s0"># Container asks the object how big it wants to be to exactly fit its content:</span>
+<span class="s1">DVEXTENT_CONTENT = </span><span class="s4">0</span>
+<span class="s0"># The container proposes a size to the object for its use in resizing:</span>
+<span class="s1">DVEXTENT_INTEGRAL = </span><span class="s4">1</span>
+</pre>
+</body>
+</html>

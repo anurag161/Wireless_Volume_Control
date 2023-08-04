@@ -1,0 +1,899 @@
+<html>
+<head>
+<title>test_windows.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_windows.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+<span class="s0"># -*- coding: UTF-8 -*</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;Windows specific tests.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">datetime</span>
+<span class="s3">import </span><span class="s1">errno</span>
+<span class="s3">import </span><span class="s1">glob</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">platform</span>
+<span class="s3">import </span><span class="s1">re</span>
+<span class="s3">import </span><span class="s1">signal</span>
+<span class="s3">import </span><span class="s1">subprocess</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">import </span><span class="s1">time</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+<span class="s3">import </span><span class="s1">warnings</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">WINDOWS</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">FileNotFoundError</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">which</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">super</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">APPVEYOR</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">GITHUB_ACTIONS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_BATTERY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">IS_64BIT</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PY3</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PYPY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TOLERANCE_DISK_USAGE</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TOLERANCE_SYS_MEM</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">mock</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry_on_failure</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">sh</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">spawn_testproc</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">terminate</span>
+
+
+<span class="s3">if </span><span class="s1">WINDOWS </span><span class="s3">and not </span><span class="s1">PYPY:</span>
+    <span class="s3">with </span><span class="s1">warnings.catch_warnings():</span>
+        <span class="s1">warnings.simplefilter(</span><span class="s4">&quot;ignore&quot;</span><span class="s1">)</span>
+        <span class="s3">import </span><span class="s1">win32api  </span><span class="s0"># requires &quot;pip install pywin32&quot;</span>
+        <span class="s3">import </span><span class="s1">win32con</span>
+        <span class="s3">import </span><span class="s1">win32process</span>
+        <span class="s3">import </span><span class="s1">wmi  </span><span class="s0"># requires &quot;pip install wmi&quot; / &quot;make setup-dev-env&quot;</span>
+
+<span class="s3">if </span><span class="s1">WINDOWS:</span>
+    <span class="s3">from </span><span class="s1">psutil._pswindows </span><span class="s3">import </span><span class="s1">convert_oserror</span>
+
+
+<span class="s1">cext = psutil._psplatform.cext</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;WINDOWS only&quot;</span><span class="s1">)</span>
+<span class="s1">@unittest.skipIf(PYPY</span><span class="s3">, </span><span class="s4">&quot;pywin32 not available on PYPY&quot;</span><span class="s1">)</span>
+<span class="s0"># https://github.com/giampaolo/psutil/pull/1762#issuecomment-632892692</span>
+<span class="s1">@unittest.skipIf(GITHUB_ACTIONS </span><span class="s3">and not </span><span class="s1">PY3</span><span class="s3">, </span><span class="s4">&quot;pywin32 broken on GITHUB + PY2&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">WindowsTestCase(PsutilTestCase):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">def </span><span class="s1">powershell(cmd):</span>
+    <span class="s2">&quot;&quot;&quot;Currently not used, but avalable just in case. Usage: 
+ 
+    &gt;&gt;&gt; powershell( 
+        &quot;Get-CIMInstance Win32_PageFileUsage | Select AllocatedBaseSize&quot;) 
+    &quot;&quot;&quot;</span>
+    <span class="s3">if not </span><span class="s1">which(</span><span class="s4">&quot;powershell.exe&quot;</span><span class="s1">):</span>
+        <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span><span class="s4">&quot;powershell.exe not available&quot;</span><span class="s1">)</span>
+    <span class="s1">cmdline = \</span>
+        <span class="s4">'powershell.exe -ExecutionPolicy Bypass -NoLogo -NonInteractive ' </span><span class="s1">+ \</span>
+        <span class="s4">'-NoProfile -WindowStyle Hidden -Command &quot;%s&quot;' </span><span class="s1">% cmd</span>
+    <span class="s3">return </span><span class="s1">sh(cmdline)</span>
+
+
+<span class="s3">def </span><span class="s1">wmic(path</span><span class="s3">, </span><span class="s1">what</span><span class="s3">, </span><span class="s1">converter=int):</span>
+    <span class="s2">&quot;&quot;&quot;Currently not used, but avalable just in case. Usage: 
+ 
+    &gt;&gt;&gt; wmic(&quot;Win32_OperatingSystem&quot;, &quot;FreePhysicalMemory&quot;) 
+    2134124534 
+    &quot;&quot;&quot;</span>
+    <span class="s1">out = sh(</span><span class="s4">&quot;wmic path %s get %s&quot; </span><span class="s1">% (path</span><span class="s3">, </span><span class="s1">what)).strip()</span>
+    <span class="s1">data = </span><span class="s4">&quot;&quot;</span><span class="s1">.join(out.splitlines()[</span><span class="s5">1</span><span class="s1">:]).strip()  </span><span class="s0"># get rid of the header</span>
+    <span class="s3">if </span><span class="s1">converter </span><span class="s3">is not None</span><span class="s1">:</span>
+        <span class="s3">if </span><span class="s4">&quot;,&quot; </span><span class="s3">in </span><span class="s1">what:</span>
+            <span class="s3">return </span><span class="s1">tuple([converter(x) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">data.split()])</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">converter(data)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">return </span><span class="s1">data</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># System APIs</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestCpuAPIs(WindowsTestCase):</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s4">'NUMBER_OF_PROCESSORS' </span><span class="s3">not in </span><span class="s1">os.environ</span><span class="s3">,</span>
+                     <span class="s4">'NUMBER_OF_PROCESSORS env var is not available'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_cpu_count_vs_NUMBER_OF_PROCESSORS(self):</span>
+        <span class="s0"># Will likely fail on many-cores systems:</span>
+        <span class="s0"># https://stackoverflow.com/questions/31209256</span>
+        <span class="s1">num_cpus = int(os.environ[</span><span class="s4">'NUMBER_OF_PROCESSORS'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(num_cpus</span><span class="s3">, </span><span class="s1">psutil.cpu_count())</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_vs_GetSystemInfo(self):</span>
+        <span class="s0"># Will likely fail on many-cores systems:</span>
+        <span class="s0"># https://stackoverflow.com/questions/31209256</span>
+        <span class="s1">sys_value = win32api.GetSystemInfo()[</span><span class="s5">5</span><span class="s1">]</span>
+        <span class="s1">psutil_value = psutil.cpu_count()</span>
+        <span class="s1">self.assertEqual(sys_value</span><span class="s3">, </span><span class="s1">psutil_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_logical_vs_wmi(self):</span>
+        <span class="s1">w = wmi.WMI()</span>
+        <span class="s1">procs = sum(proc.NumberOfLogicalProcessors</span>
+                    <span class="s3">for </span><span class="s1">proc </span><span class="s3">in </span><span class="s1">w.Win32_Processor())</span>
+        <span class="s1">self.assertEqual(psutil.cpu_count()</span><span class="s3">, </span><span class="s1">procs)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_cores_vs_wmi(self):</span>
+        <span class="s1">w = wmi.WMI()</span>
+        <span class="s1">cores = sum(proc.NumberOfCores </span><span class="s3">for </span><span class="s1">proc </span><span class="s3">in </span><span class="s1">w.Win32_Processor())</span>
+        <span class="s1">self.assertEqual(psutil.cpu_count(logical=</span><span class="s3">False</span><span class="s1">)</span><span class="s3">, </span><span class="s1">cores)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_vs_cpu_times(self):</span>
+        <span class="s1">self.assertEqual(psutil.cpu_count()</span><span class="s3">,</span>
+                         <span class="s1">len(psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)))</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_freq(self):</span>
+        <span class="s1">w = wmi.WMI()</span>
+        <span class="s1">proc = w.Win32_Processor()[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">self.assertEqual(proc.CurrentClockSpeed</span><span class="s3">, </span><span class="s1">psutil.cpu_freq().current)</span>
+        <span class="s1">self.assertEqual(proc.MaxClockSpeed</span><span class="s3">, </span><span class="s1">psutil.cpu_freq().max)</span>
+
+
+<span class="s3">class </span><span class="s1">TestSystemAPIs(WindowsTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_nic_names(self):</span>
+        <span class="s1">out = sh(</span><span class="s4">'ipconfig /all'</span><span class="s1">)</span>
+        <span class="s1">nics = psutil.net_io_counters(pernic=</span><span class="s3">True</span><span class="s1">).keys()</span>
+        <span class="s3">for </span><span class="s1">nic </span><span class="s3">in </span><span class="s1">nics:</span>
+            <span class="s3">if </span><span class="s4">&quot;pseudo-interface&quot; </span><span class="s3">in </span><span class="s1">nic.replace(</span><span class="s4">' '</span><span class="s3">, </span><span class="s4">'-'</span><span class="s1">).lower():</span>
+                <span class="s3">continue</span>
+            <span class="s3">if </span><span class="s1">nic </span><span class="s3">not in </span><span class="s1">out:</span>
+                <span class="s3">raise </span><span class="s1">self.fail(</span>
+                    <span class="s4">&quot;%r nic wasn't found in 'ipconfig /all' output&quot; </span><span class="s1">% nic)</span>
+
+    <span class="s3">def </span><span class="s1">test_total_phymem(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_ComputerSystem()[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">self.assertEqual(int(w.TotalPhysicalMemory)</span><span class="s3">,</span>
+                         <span class="s1">psutil.virtual_memory().total)</span>
+
+    <span class="s3">def </span><span class="s1">test_free_phymem(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_PerfRawData_PerfOS_Memory()[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">self.assertAlmostEqual(</span>
+            <span class="s1">int(w.AvailableBytes)</span><span class="s3">, </span><span class="s1">psutil.virtual_memory().free</span><span class="s3">,</span>
+            <span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s0"># @unittest.skipIf(wmi is None, &quot;wmi module is not installed&quot;)</span>
+    <span class="s0"># def test__UPTIME(self):</span>
+    <span class="s0">#     # _UPTIME constant is not public but it is used internally</span>
+    <span class="s0">#     # as value to return for pid 0 creation time.</span>
+    <span class="s0">#     # WMI behaves the same.</span>
+    <span class="s0">#     w = wmi.WMI().Win32_Process(ProcessId=self.pid)[0]</span>
+    <span class="s0">#     p = psutil.Process(0)</span>
+    <span class="s0">#     wmic_create = str(w.CreationDate.split('.')[0])</span>
+    <span class="s0">#     psutil_create = time.strftime(&quot;%Y%m%d%H%M%S&quot;,</span>
+    <span class="s0">#                                   time.localtime(p.create_time()))</span>
+
+    <span class="s0"># Note: this test is not very reliable</span>
+    <span class="s1">@unittest.skipIf(APPVEYOR</span><span class="s3">, </span><span class="s4">&quot;test not relieable on appveyor&quot;</span><span class="s1">)</span>
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_pids(self):</span>
+        <span class="s0"># Note: this test might fail if the OS is starting/killing</span>
+        <span class="s0"># other processes in the meantime</span>
+        <span class="s1">w = wmi.WMI().Win32_Process()</span>
+        <span class="s1">wmi_pids = set([x.ProcessId </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">w])</span>
+        <span class="s1">psutil_pids = set(psutil.pids())</span>
+        <span class="s1">self.assertEqual(wmi_pids</span><span class="s3">, </span><span class="s1">psutil_pids)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_disks(self):</span>
+        <span class="s1">ps_parts = psutil.disk_partitions(all=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">wmi_parts = wmi.WMI().Win32_LogicalDisk()</span>
+        <span class="s3">for </span><span class="s1">ps_part </span><span class="s3">in </span><span class="s1">ps_parts:</span>
+            <span class="s3">for </span><span class="s1">wmi_part </span><span class="s3">in </span><span class="s1">wmi_parts:</span>
+                <span class="s3">if </span><span class="s1">ps_part.device.replace(</span><span class="s4">'</span><span class="s3">\\</span><span class="s4">'</span><span class="s3">, </span><span class="s4">''</span><span class="s1">) == wmi_part.DeviceID:</span>
+                    <span class="s3">if not </span><span class="s1">ps_part.mountpoint:</span>
+                        <span class="s0"># this is usually a CD-ROM with no disk inserted</span>
+                        <span class="s3">break</span>
+                    <span class="s3">if </span><span class="s4">'cdrom' </span><span class="s3">in </span><span class="s1">ps_part.opts:</span>
+                        <span class="s3">break</span>
+                    <span class="s3">if </span><span class="s1">ps_part.mountpoint.startswith(</span><span class="s4">'A:'</span><span class="s1">):</span>
+                        <span class="s3">break  </span><span class="s0"># floppy</span>
+                    <span class="s3">try</span><span class="s1">:</span>
+                        <span class="s1">usage = psutil.disk_usage(ps_part.mountpoint)</span>
+                    <span class="s3">except </span><span class="s1">FileNotFoundError:</span>
+                        <span class="s0"># usually this is the floppy</span>
+                        <span class="s3">break</span>
+                    <span class="s1">self.assertEqual(usage.total</span><span class="s3">, </span><span class="s1">int(wmi_part.Size))</span>
+                    <span class="s1">wmi_free = int(wmi_part.FreeSpace)</span>
+                    <span class="s1">self.assertEqual(usage.free</span><span class="s3">, </span><span class="s1">wmi_free)</span>
+                    <span class="s0"># 10 MB tolerance</span>
+                    <span class="s3">if </span><span class="s1">abs(usage.free - wmi_free) &gt; </span><span class="s5">10 </span><span class="s1">* </span><span class="s5">1024 </span><span class="s1">* </span><span class="s5">1024</span><span class="s1">:</span>
+                        <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;psutil=%s, wmi=%s&quot; </span><span class="s1">% (</span>
+                            <span class="s1">usage.free</span><span class="s3">, </span><span class="s1">wmi_free))</span>
+                    <span class="s3">break</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;can't find partition %s&quot; </span><span class="s1">% repr(ps_part))</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_disk_usage(self):</span>
+        <span class="s3">for </span><span class="s1">disk </span><span class="s3">in </span><span class="s1">psutil.disk_partitions():</span>
+            <span class="s3">if </span><span class="s4">'cdrom' </span><span class="s3">in </span><span class="s1">disk.opts:</span>
+                <span class="s3">continue</span>
+            <span class="s1">sys_value = win32api.GetDiskFreeSpaceEx(disk.mountpoint)</span>
+            <span class="s1">psutil_value = psutil.disk_usage(disk.mountpoint)</span>
+            <span class="s1">self.assertAlmostEqual(sys_value[</span><span class="s5">0</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.free</span><span class="s3">,</span>
+                                   <span class="s1">delta=TOLERANCE_DISK_USAGE)</span>
+            <span class="s1">self.assertAlmostEqual(sys_value[</span><span class="s5">1</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.total</span><span class="s3">,</span>
+                                   <span class="s1">delta=TOLERANCE_DISK_USAGE)</span>
+            <span class="s1">self.assertEqual(psutil_value.used</span><span class="s3">,</span>
+                             <span class="s1">psutil_value.total - psutil_value.free)</span>
+
+    <span class="s3">def </span><span class="s1">test_disk_partitions(self):</span>
+        <span class="s1">sys_value = [</span>
+            <span class="s1">x + </span><span class="s4">'</span><span class="s3">\\</span><span class="s4">' </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">win32api.GetLogicalDriveStrings().split(</span><span class="s4">&quot;</span><span class="s3">\\\x00</span><span class="s4">&quot;</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">x </span><span class="s3">and not </span><span class="s1">x.startswith(</span><span class="s4">'A:'</span><span class="s1">)]</span>
+        <span class="s1">psutil_value = [x.mountpoint </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.disk_partitions(all=</span><span class="s3">True</span><span class="s1">)</span>
+                        <span class="s3">if not </span><span class="s1">x.mountpoint.startswith(</span><span class="s4">'A:'</span><span class="s1">)]</span>
+        <span class="s1">self.assertEqual(sys_value</span><span class="s3">, </span><span class="s1">psutil_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_net_if_stats(self):</span>
+        <span class="s1">ps_names = set(cext.net_if_stats())</span>
+        <span class="s1">wmi_adapters = wmi.WMI().Win32_NetworkAdapter()</span>
+        <span class="s1">wmi_names = set()</span>
+        <span class="s3">for </span><span class="s1">wmi_adapter </span><span class="s3">in </span><span class="s1">wmi_adapters:</span>
+            <span class="s1">wmi_names.add(wmi_adapter.Name)</span>
+            <span class="s1">wmi_names.add(wmi_adapter.NetConnectionID)</span>
+        <span class="s1">self.assertTrue(ps_names &amp; wmi_names</span><span class="s3">,</span>
+                        <span class="s4">&quot;no common entries in %s, %s&quot; </span><span class="s1">% (ps_names</span><span class="s3">, </span><span class="s1">wmi_names))</span>
+
+    <span class="s3">def </span><span class="s1">test_boot_time(self):</span>
+        <span class="s1">wmi_os = wmi.WMI().Win32_OperatingSystem()</span>
+        <span class="s1">wmi_btime_str = wmi_os[</span><span class="s5">0</span><span class="s1">].LastBootUpTime.split(</span><span class="s4">'.'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">wmi_btime_dt = datetime.datetime.strptime(</span>
+            <span class="s1">wmi_btime_str</span><span class="s3">, </span><span class="s4">&quot;%Y%m%d%H%M%S&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_dt = datetime.datetime.fromtimestamp(psutil.boot_time())</span>
+        <span class="s1">diff = abs((wmi_btime_dt - psutil_dt).total_seconds())</span>
+        <span class="s1">self.assertLessEqual(diff</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_boot_time_fluctuation(self):</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/1007</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._pswindows.cext.boot_time'</span><span class="s3">, </span><span class="s1">return_value=</span><span class="s5">5</span><span class="s1">):</span>
+            <span class="s1">self.assertEqual(psutil.boot_time()</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._pswindows.cext.boot_time'</span><span class="s3">, </span><span class="s1">return_value=</span><span class="s5">4</span><span class="s1">):</span>
+            <span class="s1">self.assertEqual(psutil.boot_time()</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._pswindows.cext.boot_time'</span><span class="s3">, </span><span class="s1">return_value=</span><span class="s5">6</span><span class="s1">):</span>
+            <span class="s1">self.assertEqual(psutil.boot_time()</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._pswindows.cext.boot_time'</span><span class="s3">, </span><span class="s1">return_value=</span><span class="s5">333</span><span class="s1">):</span>
+            <span class="s1">self.assertEqual(psutil.boot_time()</span><span class="s3">, </span><span class="s5">333</span><span class="s1">)</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># sensors_battery()</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestSensorsBattery(WindowsTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_has_battery(self):</span>
+        <span class="s3">if </span><span class="s1">win32api.GetPwrCapabilities()[</span><span class="s4">'SystemBatteriesPresent'</span><span class="s1">]:</span>
+            <span class="s1">self.assertIsNotNone(psutil.sensors_battery())</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertIsNone(psutil.sensors_battery())</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_BATTERY</span><span class="s3">, </span><span class="s4">&quot;no battery&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_percent(self):</span>
+        <span class="s1">w = wmi.WMI()</span>
+        <span class="s1">battery_wmi = w.query(</span><span class="s4">'select * from Win32_Battery'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">battery_psutil = psutil.sensors_battery()</span>
+        <span class="s1">self.assertAlmostEqual(</span>
+            <span class="s1">battery_psutil.percent</span><span class="s3">, </span><span class="s1">battery_wmi.EstimatedChargeRemaining</span><span class="s3">,</span>
+            <span class="s1">delta=</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_BATTERY</span><span class="s3">, </span><span class="s4">&quot;no battery&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_power_plugged(self):</span>
+        <span class="s1">w = wmi.WMI()</span>
+        <span class="s1">battery_wmi = w.query(</span><span class="s4">'select * from Win32_Battery'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">battery_psutil = psutil.sensors_battery()</span>
+        <span class="s0"># Status codes:</span>
+        <span class="s0"># https://msdn.microsoft.com/en-us/library/aa394074(v=vs.85).aspx</span>
+        <span class="s1">self.assertEqual(battery_psutil.power_plugged</span><span class="s3">,</span>
+                         <span class="s1">battery_wmi.BatteryStatus == </span><span class="s5">2</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_emulate_no_battery(self):</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._pswindows.cext.sensors_battery&quot;</span><span class="s3">,</span>
+                        <span class="s1">return_value=(</span><span class="s5">0</span><span class="s3">, </span><span class="s5">128</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertIsNone(psutil.sensors_battery())</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_emulate_power_connected(self):</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._pswindows.cext.sensors_battery&quot;</span><span class="s3">,</span>
+                        <span class="s1">return_value=(</span><span class="s5">1</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertEqual(psutil.sensors_battery().secsleft</span><span class="s3">,</span>
+                             <span class="s1">psutil.POWER_TIME_UNLIMITED)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_emulate_power_charging(self):</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._pswindows.cext.sensors_battery&quot;</span><span class="s3">,</span>
+                        <span class="s1">return_value=(</span><span class="s5">0</span><span class="s3">, </span><span class="s5">8</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertEqual(psutil.sensors_battery().secsleft</span><span class="s3">,</span>
+                             <span class="s1">psutil.POWER_TIME_UNLIMITED)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_emulate_secs_left_unknown(self):</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._pswindows.cext.sensors_battery&quot;</span><span class="s3">,</span>
+                        <span class="s1">return_value=(</span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">-</span><span class="s5">1</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertEqual(psutil.sensors_battery().secsleft</span><span class="s3">,</span>
+                             <span class="s1">psutil.POWER_TIME_UNKNOWN)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># Process APIs</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestProcess(WindowsTestCase):</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">setUpClass(cls):</span>
+        <span class="s1">cls.pid = spawn_testproc().pid</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">tearDownClass(cls):</span>
+        <span class="s1">terminate(cls.pid)</span>
+
+    <span class="s3">def </span><span class="s1">test_issue_24(self):</span>
+        <span class="s1">p = psutil.Process(</span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(psutil.AccessDenied</span><span class="s3">, </span><span class="s1">p.kill)</span>
+
+    <span class="s3">def </span><span class="s1">test_special_pid(self):</span>
+        <span class="s1">p = psutil.Process(</span><span class="s5">4</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(p.name()</span><span class="s3">, </span><span class="s4">'System'</span><span class="s1">)</span>
+        <span class="s0"># use __str__ to access all common Process properties to check</span>
+        <span class="s0"># that nothing strange happens</span>
+        <span class="s1">str(p)</span>
+        <span class="s1">p.username()</span>
+        <span class="s1">self.assertTrue(p.create_time() &gt;= </span><span class="s5">0.0</span><span class="s1">)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">rss</span><span class="s3">, </span><span class="s1">vms = p.memory_info()[:</span><span class="s5">2</span><span class="s1">]</span>
+        <span class="s3">except </span><span class="s1">psutil.AccessDenied:</span>
+            <span class="s0"># expected on Windows Vista and Windows 7</span>
+            <span class="s3">if not </span><span class="s1">platform.uname()[</span><span class="s5">1</span><span class="s1">] </span><span class="s3">in </span><span class="s1">(</span><span class="s4">'vista'</span><span class="s3">, </span><span class="s4">'win-7'</span><span class="s3">, </span><span class="s4">'win7'</span><span class="s1">):</span>
+                <span class="s3">raise</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertTrue(rss &gt; </span><span class="s5">0</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_send_signal(self):</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">p.send_signal</span><span class="s3">, </span><span class="s1">signal.SIGINT)</span>
+
+    <span class="s3">def </span><span class="s1">test_num_handles_increment(self):</span>
+        <span class="s1">p = psutil.Process(os.getpid())</span>
+        <span class="s1">before = p.num_handles()</span>
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">os.getpid())</span>
+        <span class="s1">after = p.num_handles()</span>
+        <span class="s1">self.assertEqual(after</span><span class="s3">, </span><span class="s1">before + </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">win32api.CloseHandle(handle)</span>
+        <span class="s1">self.assertEqual(p.num_handles()</span><span class="s3">, </span><span class="s1">before)</span>
+
+    <span class="s3">def </span><span class="s1">test_ctrl_signals(self):</span>
+        <span class="s1">p = psutil.Process(self.spawn_testproc().pid)</span>
+        <span class="s1">p.send_signal(signal.CTRL_C_EVENT)</span>
+        <span class="s1">p.send_signal(signal.CTRL_BREAK_EVENT)</span>
+        <span class="s1">p.kill()</span>
+        <span class="s1">p.wait()</span>
+        <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">,</span>
+                          <span class="s1">p.send_signal</span><span class="s3">, </span><span class="s1">signal.CTRL_C_EVENT)</span>
+        <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">,</span>
+                          <span class="s1">p.send_signal</span><span class="s3">, </span><span class="s1">signal.CTRL_BREAK_EVENT)</span>
+
+    <span class="s3">def </span><span class="s1">test_username(self):</span>
+        <span class="s1">name = win32api.GetUserNameEx(win32con.NameSamCompatible)</span>
+        <span class="s3">if </span><span class="s1">name.endswith(</span><span class="s4">'$'</span><span class="s1">):</span>
+            <span class="s0"># When running as a service account (most likely to be</span>
+            <span class="s0"># NetworkService), these user name calculations don't produce the</span>
+            <span class="s0"># same result, causing the test to fail.</span>
+            <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span><span class="s4">'running as service account'</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(psutil.Process().username()</span><span class="s3">, </span><span class="s1">name)</span>
+
+    <span class="s3">def </span><span class="s1">test_cmdline(self):</span>
+        <span class="s1">sys_value = re.sub(</span><span class="s4">'[ ]+'</span><span class="s3">, </span><span class="s4">' '</span><span class="s3">, </span><span class="s1">win32api.GetCommandLine()).strip()</span>
+        <span class="s1">psutil_value = </span><span class="s4">' '</span><span class="s1">.join(psutil.Process().cmdline())</span>
+        <span class="s3">if </span><span class="s1">sys_value[</span><span class="s5">0</span><span class="s1">] == </span><span class="s4">'&quot;' </span><span class="s1">!= psutil_value[</span><span class="s5">0</span><span class="s1">]:</span>
+            <span class="s0"># The PyWin32 command line may retain quotes around argv[0] if they</span>
+            <span class="s0"># were used unnecessarily, while psutil will omit them. So remove</span>
+            <span class="s0"># the first 2 quotes from sys_value if not in psutil_value.</span>
+            <span class="s0"># A path to an executable will not contain quotes, so this is safe.</span>
+            <span class="s1">sys_value = sys_value.replace(</span><span class="s4">'&quot;'</span><span class="s3">, </span><span class="s4">''</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(sys_value</span><span class="s3">, </span><span class="s1">psutil_value)</span>
+
+    <span class="s0"># XXX - occasional failures</span>
+
+    <span class="s0"># def test_cpu_times(self):</span>
+    <span class="s0">#     handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION,</span>
+    <span class="s0">#                                   win32con.FALSE, os.getpid())</span>
+    <span class="s0">#     self.addCleanup(win32api.CloseHandle, handle)</span>
+    <span class="s0">#     sys_value = win32process.GetProcessTimes(handle)</span>
+    <span class="s0">#     psutil_value = psutil.Process().cpu_times()</span>
+    <span class="s0">#     self.assertAlmostEqual(</span>
+    <span class="s0">#         psutil_value.user, sys_value['UserTime'] / 10000000.0,</span>
+    <span class="s0">#         delta=0.2)</span>
+    <span class="s0">#     self.assertAlmostEqual(</span>
+    <span class="s0">#         psutil_value.user, sys_value['KernelTime'] / 10000000.0,</span>
+    <span class="s0">#         delta=0.2)</span>
+
+    <span class="s3">def </span><span class="s1">test_nice(self):</span>
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">os.getpid())</span>
+        <span class="s1">self.addCleanup(win32api.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+        <span class="s1">sys_value = win32process.GetPriorityClass(handle)</span>
+        <span class="s1">psutil_value = psutil.Process().nice()</span>
+        <span class="s1">self.assertEqual(psutil_value</span><span class="s3">, </span><span class="s1">sys_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_memory_info(self):</span>
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">self.pid)</span>
+        <span class="s1">self.addCleanup(win32api.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+        <span class="s1">sys_value = win32process.GetProcessMemoryInfo(handle)</span>
+        <span class="s1">psutil_value = psutil.Process(self.pid).memory_info()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'PeakWorkingSetSize'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.peak_wset)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'WorkingSetSize'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.wset)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'QuotaPeakPagedPoolUsage'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.peak_paged_pool)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'QuotaPagedPoolUsage'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.paged_pool)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'QuotaPeakNonPagedPoolUsage'</span><span class="s1">]</span><span class="s3">,</span>
+            <span class="s1">psutil_value.peak_nonpaged_pool)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'QuotaNonPagedPoolUsage'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.nonpaged_pool)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'PagefileUsage'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.pagefile)</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">sys_value[</span><span class="s4">'PeakPagefileUsage'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">psutil_value.peak_pagefile)</span>
+
+        <span class="s1">self.assertEqual(psutil_value.rss</span><span class="s3">, </span><span class="s1">psutil_value.wset)</span>
+        <span class="s1">self.assertEqual(psutil_value.vms</span><span class="s3">, </span><span class="s1">psutil_value.pagefile)</span>
+
+    <span class="s3">def </span><span class="s1">test_wait(self):</span>
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">self.pid)</span>
+        <span class="s1">self.addCleanup(win32api.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">p.terminate()</span>
+        <span class="s1">psutil_value = p.wait()</span>
+        <span class="s1">sys_value = win32process.GetExitCodeProcess(handle)</span>
+        <span class="s1">self.assertEqual(psutil_value</span><span class="s3">, </span><span class="s1">sys_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_affinity(self):</span>
+        <span class="s3">def </span><span class="s1">from_bitmask(x):</span>
+            <span class="s3">return </span><span class="s1">[i </span><span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range(</span><span class="s5">64</span><span class="s1">) </span><span class="s3">if </span><span class="s1">(</span><span class="s5">1 </span><span class="s1">&lt;&lt; i) &amp; x]</span>
+
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">self.pid)</span>
+        <span class="s1">self.addCleanup(win32api.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+        <span class="s1">sys_value = from_bitmask(</span>
+            <span class="s1">win32process.GetProcessAffinityMask(handle)[</span><span class="s5">0</span><span class="s1">])</span>
+        <span class="s1">psutil_value = psutil.Process(self.pid).cpu_affinity()</span>
+        <span class="s1">self.assertEqual(psutil_value</span><span class="s3">, </span><span class="s1">sys_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_io_counters(self):</span>
+        <span class="s1">handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION</span><span class="s3">,</span>
+                                      <span class="s1">win32con.FALSE</span><span class="s3">, </span><span class="s1">os.getpid())</span>
+        <span class="s1">self.addCleanup(win32api.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+        <span class="s1">sys_value = win32process.GetProcessIoCounters(handle)</span>
+        <span class="s1">psutil_value = psutil.Process().io_counters()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.read_count</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'ReadOperationCount'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.write_count</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'WriteOperationCount'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.read_bytes</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'ReadTransferCount'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.write_bytes</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'WriteTransferCount'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.other_count</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'OtherOperationCount'</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">psutil_value.other_bytes</span><span class="s3">, </span><span class="s1">sys_value[</span><span class="s4">'OtherTransferCount'</span><span class="s1">])</span>
+
+    <span class="s3">def </span><span class="s1">test_num_handles(self):</span>
+        <span class="s3">import </span><span class="s1">ctypes</span>
+        <span class="s3">import </span><span class="s1">ctypes.wintypes</span>
+        <span class="s1">PROCESS_QUERY_INFORMATION = </span><span class="s5">0x400</span>
+        <span class="s1">handle = ctypes.windll.kernel32.OpenProcess(</span>
+            <span class="s1">PROCESS_QUERY_INFORMATION</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">self.pid)</span>
+        <span class="s1">self.addCleanup(ctypes.windll.kernel32.CloseHandle</span><span class="s3">, </span><span class="s1">handle)</span>
+
+        <span class="s1">hndcnt = ctypes.wintypes.DWORD()</span>
+        <span class="s1">ctypes.windll.kernel32.GetProcessHandleCount(</span>
+            <span class="s1">handle</span><span class="s3">, </span><span class="s1">ctypes.byref(hndcnt))</span>
+        <span class="s1">sys_value = hndcnt.value</span>
+        <span class="s1">psutil_value = psutil.Process(self.pid).num_handles()</span>
+        <span class="s1">self.assertEqual(psutil_value</span><span class="s3">, </span><span class="s1">sys_value)</span>
+
+    <span class="s3">def </span><span class="s1">test_error_partial_copy(self):</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/875</span>
+        <span class="s1">exc = WindowsError()</span>
+        <span class="s1">exc.winerror = </span><span class="s5">299</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_cwd&quot;</span><span class="s3">, </span><span class="s1">side_effect=exc):</span>
+            <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;time.sleep&quot;</span><span class="s1">) </span><span class="s3">as </span><span class="s1">m:</span>
+                <span class="s1">p = psutil.Process()</span>
+                <span class="s1">self.assertRaises(psutil.AccessDenied</span><span class="s3">, </span><span class="s1">p.cwd)</span>
+        <span class="s1">self.assertGreaterEqual(m.call_count</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_exe(self):</span>
+        <span class="s0"># NtQuerySystemInformation succeeds if process is gone. Make sure</span>
+        <span class="s0"># it raises NSP for a non existent pid.</span>
+        <span class="s1">pid = psutil.pids()[-</span><span class="s5">1</span><span class="s1">] + </span><span class="s5">99999</span>
+        <span class="s1">proc = psutil._psplatform.Process(pid)</span>
+        <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">, </span><span class="s1">proc.exe)</span>
+
+
+<span class="s3">class </span><span class="s1">TestProcessWMI(WindowsTestCase):</span>
+    <span class="s2">&quot;&quot;&quot;Compare Process API results with WMI.&quot;&quot;&quot;</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">setUpClass(cls):</span>
+        <span class="s1">cls.pid = spawn_testproc().pid</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">tearDownClass(cls):</span>
+        <span class="s1">terminate(cls.pid)</span>
+
+    <span class="s3">def </span><span class="s1">test_name(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">self.assertEqual(p.name()</span><span class="s3">, </span><span class="s1">w.Caption)</span>
+
+    <span class="s0"># This fail on github because using virtualenv for test environment</span>
+    <span class="s1">@unittest.skipIf(GITHUB_ACTIONS</span><span class="s3">, </span><span class="s4">&quot;unreliable path on GITHUB_ACTIONS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_exe(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s0"># Note: wmi reports the exe as a lower case string.</span>
+        <span class="s0"># Being Windows paths case-insensitive we ignore that.</span>
+        <span class="s1">self.assertEqual(p.exe().lower()</span><span class="s3">, </span><span class="s1">w.ExecutablePath.lower())</span>
+
+    <span class="s3">def </span><span class="s1">test_cmdline(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">self.assertEqual(</span><span class="s4">' '</span><span class="s1">.join(p.cmdline())</span><span class="s3">,</span>
+                         <span class="s1">w.CommandLine.replace(</span><span class="s4">'&quot;'</span><span class="s3">, </span><span class="s4">''</span><span class="s1">))</span>
+
+    <span class="s3">def </span><span class="s1">test_username(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">domain</span><span class="s3">, </span><span class="s1">_</span><span class="s3">, </span><span class="s1">username = w.GetOwner()</span>
+        <span class="s1">username = </span><span class="s4">&quot;%s</span><span class="s3">\\</span><span class="s4">%s&quot; </span><span class="s1">% (domain</span><span class="s3">, </span><span class="s1">username)</span>
+        <span class="s1">self.assertEqual(p.username()</span><span class="s3">, </span><span class="s1">username)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_memory_rss(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">rss = p.memory_info().rss</span>
+        <span class="s1">self.assertEqual(rss</span><span class="s3">, </span><span class="s1">int(w.WorkingSetSize))</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_memory_vms(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">vms = p.memory_info().vms</span>
+        <span class="s0"># http://msdn.microsoft.com/en-us/library/aa394372(VS.85).aspx</span>
+        <span class="s0"># ...claims that PageFileUsage is represented in Kilo</span>
+        <span class="s0"># bytes but funnily enough on certain platforms bytes are</span>
+        <span class="s0"># returned instead.</span>
+        <span class="s1">wmi_usage = int(w.PageFileUsage)</span>
+        <span class="s3">if </span><span class="s1">(vms != wmi_usage) </span><span class="s3">and </span><span class="s1">(vms != wmi_usage * </span><span class="s5">1024</span><span class="s1">):</span>
+            <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;wmi=%s, psutil=%s&quot; </span><span class="s1">% (wmi_usage</span><span class="s3">, </span><span class="s1">vms))</span>
+
+    <span class="s3">def </span><span class="s1">test_create_time(self):</span>
+        <span class="s1">w = wmi.WMI().Win32_Process(ProcessId=self.pid)[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Process(self.pid)</span>
+        <span class="s1">wmic_create = str(w.CreationDate.split(</span><span class="s4">'.'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">])</span>
+        <span class="s1">psutil_create = time.strftime(</span><span class="s4">&quot;%Y%m%d%H%M%S&quot;</span><span class="s3">,</span>
+                                      <span class="s1">time.localtime(p.create_time()))</span>
+        <span class="s1">self.assertEqual(wmic_create</span><span class="s3">, </span><span class="s1">psutil_create)</span>
+
+
+<span class="s0"># ---</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;WINDOWS only&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestDualProcessImplementation(PsutilTestCase):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Certain APIs on Windows have 2 internal implementations, one 
+    based on documented Windows APIs, another one based 
+    NtQuerySystemInformation() which gets called as fallback in 
+    case the first fails because of limited permission error. 
+    Here we test that the two methods return the exact same value, 
+    see: 
+    https://github.com/giampaolo/psutil/issues/304 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">setUpClass(cls):</span>
+        <span class="s1">cls.pid = spawn_testproc().pid</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">tearDownClass(cls):</span>
+        <span class="s1">terminate(cls.pid)</span>
+
+    <span class="s3">def </span><span class="s1">test_memory_info(self):</span>
+        <span class="s1">mem_1 = psutil.Process(self.pid).memory_info()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_memory_info&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EPERM</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">fun:</span>
+            <span class="s1">mem_2 = psutil.Process(self.pid).memory_info()</span>
+            <span class="s1">self.assertEqual(len(mem_1)</span><span class="s3">, </span><span class="s1">len(mem_2))</span>
+            <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range(len(mem_1)):</span>
+                <span class="s1">self.assertGreaterEqual(mem_1[i]</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+                <span class="s1">self.assertGreaterEqual(mem_2[i]</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+                <span class="s1">self.assertAlmostEqual(mem_1[i]</span><span class="s3">, </span><span class="s1">mem_2[i]</span><span class="s3">, </span><span class="s1">delta=</span><span class="s5">512</span><span class="s1">)</span>
+            <span class="s3">assert </span><span class="s1">fun.called</span>
+
+    <span class="s3">def </span><span class="s1">test_create_time(self):</span>
+        <span class="s1">ctime = psutil.Process(self.pid).create_time()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_times&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EPERM</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">fun:</span>
+            <span class="s1">self.assertEqual(psutil.Process(self.pid).create_time()</span><span class="s3">, </span><span class="s1">ctime)</span>
+            <span class="s3">assert </span><span class="s1">fun.called</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_times(self):</span>
+        <span class="s1">cpu_times_1 = psutil.Process(self.pid).cpu_times()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_times&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EPERM</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">fun:</span>
+            <span class="s1">cpu_times_2 = psutil.Process(self.pid).cpu_times()</span>
+            <span class="s3">assert </span><span class="s1">fun.called</span>
+            <span class="s1">self.assertAlmostEqual(</span>
+                <span class="s1">cpu_times_1.user</span><span class="s3">, </span><span class="s1">cpu_times_2.user</span><span class="s3">, </span><span class="s1">delta=</span><span class="s5">0.01</span><span class="s1">)</span>
+            <span class="s1">self.assertAlmostEqual(</span>
+                <span class="s1">cpu_times_1.system</span><span class="s3">, </span><span class="s1">cpu_times_2.system</span><span class="s3">, </span><span class="s1">delta=</span><span class="s5">0.01</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_io_counters(self):</span>
+        <span class="s1">io_counters_1 = psutil.Process(self.pid).io_counters()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_io_counters&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EPERM</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">fun:</span>
+            <span class="s1">io_counters_2 = psutil.Process(self.pid).io_counters()</span>
+            <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range(len(io_counters_1)):</span>
+                <span class="s1">self.assertAlmostEqual(</span>
+                    <span class="s1">io_counters_1[i]</span><span class="s3">, </span><span class="s1">io_counters_2[i]</span><span class="s3">, </span><span class="s1">delta=</span><span class="s5">5</span><span class="s1">)</span>
+            <span class="s3">assert </span><span class="s1">fun.called</span>
+
+    <span class="s3">def </span><span class="s1">test_num_handles(self):</span>
+        <span class="s1">num_handles = psutil.Process(self.pid).num_handles()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.proc_num_handles&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EPERM</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">fun:</span>
+            <span class="s1">self.assertEqual(psutil.Process(self.pid).num_handles()</span><span class="s3">,</span>
+                             <span class="s1">num_handles)</span>
+            <span class="s3">assert </span><span class="s1">fun.called</span>
+
+    <span class="s3">def </span><span class="s1">test_cmdline(self):</span>
+        <span class="s3">for </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">psutil.pids():</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">a = cext.proc_cmdline(pid</span><span class="s3">, </span><span class="s1">use_peb=</span><span class="s3">True</span><span class="s1">)</span>
+                <span class="s1">b = cext.proc_cmdline(pid</span><span class="s3">, </span><span class="s1">use_peb=</span><span class="s3">False</span><span class="s1">)</span>
+            <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">err:</span>
+                <span class="s1">err = convert_oserror(err)</span>
+                <span class="s3">if not </span><span class="s1">isinstance(err</span><span class="s3">, </span><span class="s1">(psutil.AccessDenied</span><span class="s3">,</span>
+                                        <span class="s1">psutil.NoSuchProcess)):</span>
+                    <span class="s3">raise</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self.assertEqual(a</span><span class="s3">, </span><span class="s1">b)</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;WINDOWS only&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">RemoteProcessTestCase(PsutilTestCase):</span>
+    <span class="s2">&quot;&quot;&quot;Certain functions require calling ReadProcessMemory. 
+    This trivially works when called on the current process. 
+    Check that this works on other processes, especially when they 
+    have a different bitness. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">find_other_interpreter():</span>
+        <span class="s0"># find a python interpreter that is of the opposite bitness from us</span>
+        <span class="s1">code = </span><span class="s4">&quot;import sys; sys.stdout.write(str(sys.maxsize &gt; 2**32))&quot;</span>
+
+        <span class="s0"># XXX: a different and probably more stable approach might be to access</span>
+        <span class="s0"># the registry but accessing 64 bit paths from a 32 bit process</span>
+        <span class="s3">for </span><span class="s1">filename </span><span class="s3">in </span><span class="s1">glob.glob(</span><span class="s4">r&quot;C:\Python*\python.exe&quot;</span><span class="s1">):</span>
+            <span class="s1">proc = subprocess.Popen(args=[filename</span><span class="s3">, </span><span class="s4">&quot;-c&quot;</span><span class="s3">, </span><span class="s1">code]</span><span class="s3">,</span>
+                                    <span class="s1">stdout=subprocess.PIPE</span><span class="s3">,</span>
+                                    <span class="s1">stderr=subprocess.STDOUT)</span>
+            <span class="s1">output</span><span class="s3">, </span><span class="s1">_ = proc.communicate()</span>
+            <span class="s1">proc.wait()</span>
+            <span class="s3">if </span><span class="s1">output == str(</span><span class="s3">not </span><span class="s1">IS_64BIT):</span>
+                <span class="s3">return </span><span class="s1">filename</span>
+
+    <span class="s1">test_args = [</span><span class="s4">&quot;-c&quot;</span><span class="s3">, </span><span class="s4">&quot;import sys; sys.stdin.read()&quot;</span><span class="s1">]</span>
+
+    <span class="s3">def </span><span class="s1">setUp(self):</span>
+        <span class="s1">super().setUp()</span>
+
+        <span class="s1">other_python = self.find_other_interpreter()</span>
+        <span class="s3">if </span><span class="s1">other_python </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span>
+                <span class="s4">&quot;could not find interpreter with opposite bitness&quot;</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">IS_64BIT:</span>
+            <span class="s1">self.python64 = sys.executable</span>
+            <span class="s1">self.python32 = other_python</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.python64 = other_python</span>
+            <span class="s1">self.python32 = sys.executable</span>
+
+        <span class="s1">env = os.environ.copy()</span>
+        <span class="s1">env[</span><span class="s4">&quot;THINK_OF_A_NUMBER&quot;</span><span class="s1">] = str(os.getpid())</span>
+        <span class="s1">self.proc32 = self.spawn_testproc(</span>
+            <span class="s1">[self.python32] + self.test_args</span><span class="s3">,</span>
+            <span class="s1">env=env</span><span class="s3">,</span>
+            <span class="s1">stdin=subprocess.PIPE)</span>
+        <span class="s1">self.proc64 = self.spawn_testproc(</span>
+            <span class="s1">[self.python64] + self.test_args</span><span class="s3">,</span>
+            <span class="s1">env=env</span><span class="s3">,</span>
+            <span class="s1">stdin=subprocess.PIPE)</span>
+
+    <span class="s3">def </span><span class="s1">tearDown(self):</span>
+        <span class="s1">super().tearDown()</span>
+        <span class="s1">self.proc32.communicate()</span>
+        <span class="s1">self.proc64.communicate()</span>
+
+    <span class="s3">def </span><span class="s1">test_cmdline_32(self):</span>
+        <span class="s1">p = psutil.Process(self.proc32.pid)</span>
+        <span class="s1">self.assertEqual(len(p.cmdline())</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(p.cmdline()[</span><span class="s5">1</span><span class="s1">:]</span><span class="s3">, </span><span class="s1">self.test_args)</span>
+
+    <span class="s3">def </span><span class="s1">test_cmdline_64(self):</span>
+        <span class="s1">p = psutil.Process(self.proc64.pid)</span>
+        <span class="s1">self.assertEqual(len(p.cmdline())</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(p.cmdline()[</span><span class="s5">1</span><span class="s1">:]</span><span class="s3">, </span><span class="s1">self.test_args)</span>
+
+    <span class="s3">def </span><span class="s1">test_cwd_32(self):</span>
+        <span class="s1">p = psutil.Process(self.proc32.pid)</span>
+        <span class="s1">self.assertEqual(p.cwd()</span><span class="s3">, </span><span class="s1">os.getcwd())</span>
+
+    <span class="s3">def </span><span class="s1">test_cwd_64(self):</span>
+        <span class="s1">p = psutil.Process(self.proc64.pid)</span>
+        <span class="s1">self.assertEqual(p.cwd()</span><span class="s3">, </span><span class="s1">os.getcwd())</span>
+
+    <span class="s3">def </span><span class="s1">test_environ_32(self):</span>
+        <span class="s1">p = psutil.Process(self.proc32.pid)</span>
+        <span class="s1">e = p.environ()</span>
+        <span class="s1">self.assertIn(</span><span class="s4">&quot;THINK_OF_A_NUMBER&quot;</span><span class="s3">, </span><span class="s1">e)</span>
+        <span class="s1">self.assertEqual(e[</span><span class="s4">&quot;THINK_OF_A_NUMBER&quot;</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str(os.getpid()))</span>
+
+    <span class="s3">def </span><span class="s1">test_environ_64(self):</span>
+        <span class="s1">p = psutil.Process(self.proc64.pid)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">p.environ()</span>
+        <span class="s3">except </span><span class="s1">psutil.AccessDenied:</span>
+            <span class="s3">pass</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># Windows services</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;WINDOWS only&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestServices(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_win_service_iter(self):</span>
+        <span class="s1">valid_statuses = set([</span>
+            <span class="s4">&quot;running&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;paused&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;start&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;pause&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;continue&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;stop&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;stopped&quot;</span><span class="s3">,</span>
+        <span class="s1">])</span>
+        <span class="s1">valid_start_types = set([</span>
+            <span class="s4">&quot;automatic&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;manual&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;disabled&quot;</span><span class="s3">,</span>
+        <span class="s1">])</span>
+        <span class="s1">valid_statuses = set([</span>
+            <span class="s4">&quot;running&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;paused&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;start_pending&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;pause_pending&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;continue_pending&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;stop_pending&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;stopped&quot;</span>
+        <span class="s1">])</span>
+        <span class="s3">for </span><span class="s1">serv </span><span class="s3">in </span><span class="s1">psutil.win_service_iter():</span>
+            <span class="s1">data = serv.as_dict()</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'name'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertNotEqual(data[</span><span class="s4">'name'</span><span class="s1">].strip()</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'display_name'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'username'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIn(data[</span><span class="s4">'status'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">valid_statuses)</span>
+            <span class="s3">if </span><span class="s1">data[</span><span class="s4">'pid'</span><span class="s1">] </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">psutil.Process(data[</span><span class="s4">'pid'</span><span class="s1">])</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'binpath'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'username'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'start_type'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIn(data[</span><span class="s4">'start_type'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">valid_start_types)</span>
+            <span class="s1">self.assertIn(data[</span><span class="s4">'status'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">valid_statuses)</span>
+            <span class="s1">self.assertIsInstance(data[</span><span class="s4">'description'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">pid = serv.pid()</span>
+            <span class="s3">if </span><span class="s1">pid </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">p = psutil.Process(pid)</span>
+                <span class="s1">self.assertTrue(p.is_running())</span>
+            <span class="s0"># win_service_get</span>
+            <span class="s1">s = psutil.win_service_get(serv.name())</span>
+            <span class="s0"># test __eq__</span>
+            <span class="s1">self.assertEqual(serv</span><span class="s3">, </span><span class="s1">s)</span>
+
+    <span class="s3">def </span><span class="s1">test_win_service_get(self):</span>
+        <span class="s1">ERROR_SERVICE_DOES_NOT_EXIST = \</span>
+            <span class="s1">psutil._psplatform.cext.ERROR_SERVICE_DOES_NOT_EXIST</span>
+        <span class="s1">ERROR_ACCESS_DENIED = psutil._psplatform.cext.ERROR_ACCESS_DENIED</span>
+
+        <span class="s1">name = next(psutil.win_service_iter()).name()</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(psutil.NoSuchProcess) </span><span class="s3">as </span><span class="s1">cm:</span>
+            <span class="s1">psutil.win_service_get(name + </span><span class="s4">'???'</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(cm.exception.name</span><span class="s3">, </span><span class="s1">name + </span><span class="s4">'???'</span><span class="s1">)</span>
+
+        <span class="s0"># test NoSuchProcess</span>
+        <span class="s1">service = psutil.win_service_get(name)</span>
+        <span class="s3">if </span><span class="s1">PY3:</span>
+            <span class="s1">args = (</span><span class="s5">0</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">ERROR_SERVICE_DOES_NOT_EXIST)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">args = (ERROR_SERVICE_DOES_NOT_EXIST</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)</span>
+        <span class="s1">exc = WindowsError(*args)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.winservice_query_status&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=exc):</span>
+            <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">, </span><span class="s1">service.status)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.winservice_query_config&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=exc):</span>
+            <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">, </span><span class="s1">service.username)</span>
+
+        <span class="s0"># test AccessDenied</span>
+        <span class="s3">if </span><span class="s1">PY3:</span>
+            <span class="s1">args = (</span><span class="s5">0</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">ERROR_ACCESS_DENIED)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">args = (ERROR_ACCESS_DENIED</span><span class="s3">, </span><span class="s4">&quot;msg&quot;</span><span class="s1">)</span>
+        <span class="s1">exc = WindowsError(*args)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.winservice_query_status&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=exc):</span>
+            <span class="s1">self.assertRaises(psutil.AccessDenied</span><span class="s3">, </span><span class="s1">service.status)</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.cext.winservice_query_config&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=exc):</span>
+            <span class="s1">self.assertRaises(psutil.AccessDenied</span><span class="s3">, </span><span class="s1">service.username)</span>
+
+        <span class="s0"># test __str__ and __repr__</span>
+        <span class="s1">self.assertIn(service.name()</span><span class="s3">, </span><span class="s1">str(service))</span>
+        <span class="s1">self.assertIn(service.display_name()</span><span class="s3">, </span><span class="s1">str(service))</span>
+        <span class="s1">self.assertIn(service.name()</span><span class="s3">, </span><span class="s1">repr(service))</span>
+        <span class="s1">self.assertIn(service.display_name()</span><span class="s3">, </span><span class="s1">repr(service))</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s4">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

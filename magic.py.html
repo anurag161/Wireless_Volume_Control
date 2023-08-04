@@ -1,0 +1,870 @@
+<html>
+<head>
+<title>magic.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+magic.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Note 
+---- 
+'import pycaw.magic' must be generally at the topmost. 
+To be more specific: 
+It needs to be imported before any other pycaw or comtypes import. 
+ 
+ 
+Reserved Atrributes 
+------------------- 
+Note that certain methods and attributes are reserved for the magic module. 
+    Please look into the source code for more information. 
+But to avoid conflicts now and in the future, i recommend using 
+a prefix for each of your custom methods and attributes. 
+ 
+ 
+COM Note for DEVS 
+----------------- 
+in order for AudioSessionNotification::OnSessionCreated to work 
+the entry point needs to CoInitialize 
+the main thread in Multi-threaded Apartment (MTA). 
+ 
+All the other Notification will work in the &quot;default&quot; comtypes mode: 
+    Single-threaded Apartment (STA) 
+ 
+Its generally true that when you work with COM components, 
+that to need to match the apartment to the component. 
+But since we are only accessing COM components, 
+it works using a MTA client to access both STA and MTA COM objects. 
+ 
+isort:skip_file 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">atexit</span>
+<span class="s2">import </span><span class="s1">logging</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+
+<span class="s3"># ____ COM WITH MULTITHREADED APARTMENT ____</span>
+<span class="s1">sys.coinit_flags = </span><span class="s4">0  </span><span class="s3"># noqa: E402</span>
+
+<span class="s3"># flake8: noqa: E402</span>
+<span class="s2">import </span><span class="s1">psutil</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">pointer</span>
+<span class="s2">from </span><span class="s1">_ctypes </span><span class="s2">import </span><span class="s1">COMError</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">GUID</span><span class="s2">, </span><span class="s1">COMObject</span>
+
+<span class="s2">from </span><span class="s1">pycaw.api.audioclient </span><span class="s2">import </span><span class="s1">ISimpleAudioVolume</span>
+<span class="s2">from </span><span class="s1">pycaw.api.audiopolicy </span><span class="s2">import </span><span class="s1">(IAudioSessionControl2</span><span class="s2">, </span><span class="s1">IAudioSessionEvents</span><span class="s2">,</span>
+                                   <span class="s1">IAudioSessionNotification)</span>
+<span class="s2">from </span><span class="s1">pycaw.constants </span><span class="s2">import </span><span class="s1">AudioSessionState</span>
+<span class="s2">from </span><span class="s1">pycaw.utils </span><span class="s2">import </span><span class="s1">AudioUtilities</span>
+
+<span class="s1">log = logging.getLogger(__name__)</span>
+<span class="s3"># use logging.INFO to skip the logs from the comtypes module</span>
+
+<span class="s1">__all__ = (</span><span class="s5">&quot;MagicManager&quot;</span><span class="s2">, </span><span class="s5">&quot;MagicApp&quot;</span><span class="s2">, </span><span class="s5">&quot;MagicSession&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">class </span><span class="s1">MagicManager(COMObject):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    The 'MagicManager' handles the magic. 
+ 
+    Features 
+    -------- 
+    -   handles adding and removing sessions from a dictionary. 
+    -   the main dict 'magic_root_sessions' contains all active sessions. 
+ 
+    -   If one or more MagicApps are hooked into the MagicManager, 
+            (by creating a new instance of a MagicApp) 
+        the MagicManager will hand over the requested sessions when available. 
+            (Those sessions which match the MagicApp(app_exec) 
+            like firefox.exe) 
+        Multiple sessions can be controlled by one MagicApp by passing 
+        multiple app_exec as a set to MagicApp: 
+            MagicApp({&quot;firefox.exe&quot;, &quot;vlc.exe&quot;}) 
+        When an app name has multiple audio sessions, 
+        they will be automatically 'merged' 
+ 
+        Note that when using MagicApp in multi session mode, that getting the 
+        volume will result in getting the volume of the loudest session. 
+        Mute and State will return the max(*states) state. 
+ 
+    -   handles giving each Windows audio session an iid. (0, 1, 2 ...) 
+        and manage it based on that. 
+ 
+    -   unregister all (still active) sessions from callback at shutdown 
+ 
+    -   OnSessionCreated is fired by Windows everytime a new session registers 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_com_interfaces_ = (IAudioSessionNotification</span><span class="s2">,</span><span class="s1">)</span>
+    <span class="s1">magic_activated = </span><span class="s2">False</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">str(cls):</span>
+        <span class="s0">&quot;&quot;&quot;Get infos about the current state.&quot;&quot;&quot;</span>
+        <span class="s3"># __str__ wont work since MagicManager is a class</span>
+        <span class="s2">if not </span><span class="s1">cls.magic_activated:</span>
+            <span class="s1">log.warning(</span>
+               <span class="s5">&quot;Nothing to show. MagicManager needs to be activated&quot;</span><span class="s1">)</span>
+            <span class="s2">return </span><span class="s5">&quot;unactive MagicManager&quot;</span>
+
+        <span class="s2">return </span><span class="s1">(</span><span class="s5">f&quot;&lt;MagicManager magic_apps='</span><span class="s2">{</span><span class="s1">len(cls.magic_apps)</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;magic_sessions='</span><span class="s2">{</span><span class="s1">len(cls.magic_sessions)</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;active_mrs='</span><span class="s2">{</span><span class="s1">len(cls.magic_root_sessions)</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;trash_mrs='</span><span class="s2">{</span><span class="s1">len(cls.expired_magic_root_sessions)</span><span class="s2">}</span><span class="s5">'&quot;</span>
+                <span class="s5">&quot;/&gt;&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">activate_magic(cls):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Gets only called once or never. Not on import. 
+        Depending if MagicApp or MagicSession are used. 
+        see: 
+            self.add_magic_app() 
+            self.magic_session() 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">cls.magic_activated:</span>
+            <span class="s1">warn = (</span><span class="s5">&quot;cannot activate MagicManager. &quot;</span>
+                    <span class="s5">&quot;MagicManager is already active!&quot;</span><span class="s1">)</span>
+            <span class="s1">log.warning(warn)</span>
+            <span class="s1">warnings.warn(warn)</span>
+            <span class="s2">return</span>
+
+        <span class="s2">if </span><span class="s1">cls.magic_activated </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">warn = (</span><span class="s5">&quot;&lt;MagicManager/&gt; was already activated an closed. &quot;</span>
+                    <span class="s5">&quot;Trying to activate again - untested&quot;</span><span class="s1">)</span>
+            <span class="s1">log.warning(warn)</span>
+            <span class="s1">warnings.warn(warn)</span>
+
+        <span class="s1">cls.magic_activated = </span><span class="s2">True</span>
+        <span class="s1">log.info(</span><span class="s5">&quot;:: activate magic&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># dict with idd -&gt; magic_root_session -&gt; _MagicRootSession</span>
+        <span class="s1">cls.magic_root_sessions = {}</span>
+        <span class="s1">cls.expired_magic_root_sessions = set()</span>
+        <span class="s3"># pycaw internal instance identifier</span>
+        <span class="s1">cls.iid_count = </span><span class="s4">0</span>
+
+        <span class="s3"># set of MagicApp instances</span>
+        <span class="s1">cls.magic_apps = set()</span>
+
+        <span class="s3"># if registered via MagicManager.magic_session()</span>
+        <span class="s3"># will hold the MagicSession and additional args + kwargs</span>
+        <span class="s1">cls.MagicSessionConfigured = </span><span class="s2">None</span>
+        <span class="s3"># dict like magic_root_sessions but for the</span>
+        <span class="s3"># magic_sessions wrappers</span>
+        <span class="s1">cls.magic_sessions = {}</span>
+
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">cls._mgr = AudioUtilities.GetAudioSessionManager()</span>
+            <span class="s1">log.debug(</span><span class="s5">&quot;&lt;MagicManager/&gt; got manager&quot;</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">COMError:</span>
+            <span class="s1">cls.magic_activated = </span><span class="s2">False</span>
+            <span class="s1">warn = </span><span class="s5">&quot;&lt;MagicManager/&gt; No speaker connected&quot;</span>
+            <span class="s1">log.warning(warn)</span>
+            <span class="s2">raise </span><span class="s1">ValueError(warn)</span>
+
+        <span class="s3"># RegisterSessionNotification needs an instance not a class</span>
+        <span class="s1">cls._callback_magic_manager = cls()</span>
+        <span class="s1">cls._mgr.RegisterSessionNotification(cls._callback_magic_manager)</span>
+        <span class="s3"># has to get called -</span>
+        <span class="s3"># to make IAudioSessionNotification::OnSessionCreated working</span>
+        <span class="s1">sessionEnumerator = cls._mgr.GetSessionEnumerator()</span>
+
+        <span class="s1">log.debug(</span>
+            <span class="s5">&quot;&lt;MagicManager/&gt; registered and activated session notification&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># Scan for running session and add them to session_manager</span>
+
+        <span class="s3"># get all active sessions</span>
+        <span class="s1">count = sessionEnumerator.GetCount()</span>
+        <span class="s1">log.info(</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">count</span><span class="s2">} </span><span class="s5">sessions already active&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># add sessions to session_manager</span>
+        <span class="s1">log.debug(</span><span class="s5">&quot;adding sessions manually&quot;</span><span class="s1">)</span>
+
+        <span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range(count):</span>
+            <span class="s1">ctl = sessionEnumerator.GetSession(i)</span>
+            <span class="s1">cls.OnSessionCreated(ctl)</span>
+
+        <span class="s3"># register clean up mechanism, when script is closed.</span>
+        <span class="s1">atexit.register(cls.clean_up)</span>
+
+        <span class="s1">log.info(cls.str())</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">OnSessionCreated(cls</span><span class="s2">, </span><span class="s1">ctl):</span>
+        <span class="s0">&quot;&quot;&quot;Is fired, when a new audio session is created/found.&quot;&quot;&quot;</span>
+        <span class="s1">log.debug(</span><span class="s5">&quot;:: new session&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># create a pycaw internal instance identifier</span>
+        <span class="s1">iid = cls.iid_count</span>
+        <span class="s1">cls.iid_count += </span><span class="s4">1</span>
+
+        <span class="s3"># create a new magic_root_session</span>
+        <span class="s1">magic_root_session = _MagicRootSession(ctl</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">cls)</span>
+
+        <span class="s1">cls.magic_root_sessions[iid] = magic_root_session</span>
+
+        <span class="s2">if </span><span class="s1">cls.magic_apps:</span>
+            <span class="s3"># add exe to matching magic app</span>
+            <span class="s1">cls._match_sess_to_mapp(magic_root_session</span><span class="s2">, </span><span class="s1">iid)</span>
+
+        <span class="s2">if </span><span class="s1">cls.MagicSessionConfigured:</span>
+            <span class="s3"># if MagicSession is configured via cls.magic_session()</span>
+            <span class="s1">MagicSessionClass</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs = cls.MagicSessionConfigured</span>
+            <span class="s1">magic_session = MagicSessionClass.initialize(</span>
+                <span class="s1">magic_root_session</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+            <span class="s1">cls.magic_sessions[iid] = magic_session</span>
+
+        <span class="s1">log.info(cls.str())</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">magic_session(cls</span><span class="s2">, </span><span class="s1">MagicSessionClass</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        gets called explicit by the user with a custom MagicSession. 
+        this will tell the MagicManager to create for all current 
+        and new sessions a custom MagicSession. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">cls.magic_activated:</span>
+            <span class="s1">cls.activate_magic()</span>
+
+        <span class="s2">if </span><span class="s1">cls.MagicSessionConfigured:</span>
+            <span class="s2">raise </span><span class="s1">NotImplementedError(</span>
+                <span class="s5">&quot;only one MagicSession wrapper is allowed&quot;</span><span class="s1">)</span>
+
+        <span class="s2">for </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_root_session </span><span class="s2">in </span><span class="s1">cls.magic_root_sessions.items():</span>
+            <span class="s1">magic_session = MagicSessionClass.initialize(</span>
+                <span class="s1">magic_root_session</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+            <span class="s1">cls.magic_sessions[iid] = magic_session</span>
+        <span class="s1">cls.MagicSessionConfigured = (MagicSessionClass</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">add_magic_app(cls</span><span class="s2">, </span><span class="s1">magic_app</span><span class="s2">, </span><span class="s1">app_execs):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        gets called when a new magic_app is created. 
+        this will tell the MagicManager add all current and 
+        new matching sessions by app_execs to the magic_app. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">cls.magic_activated:</span>
+            <span class="s1">cls.activate_magic()</span>
+        <span class="s1">log.info(</span><span class="s5">f&quot;searching matching active sessions for: </span><span class="s2">{</span><span class="s1">magic_app</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+        <span class="s2">for </span><span class="s1">app_exec </span><span class="s2">in </span><span class="s1">app_execs:</span>
+            <span class="s2">for </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_root_session </span><span class="s2">in </span><span class="s1">cls.magic_root_sessions.items():</span>
+                <span class="s3"># and not magic_root_session.magic_app</span>
+                <span class="s3"># will prohibit multiple magic_apps to use the same</span>
+                <span class="s3"># magic_root_session</span>
+                <span class="s2">if </span><span class="s1">(magic_root_session.app_exec == app_exec </span><span class="s2">and</span>
+                        <span class="s2">not </span><span class="s1">magic_root_session.magic_app):</span>
+                    <span class="s1">log.info(</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">} </span><span class="s5">matched </span><span class="s2">{</span><span class="s1">magic_app</span><span class="s2">}</span><span class="s5">.&quot;</span><span class="s1">)</span>
+                    <span class="s1">magic_app.add_magic_root_session(iid</span><span class="s2">, </span><span class="s1">magic_root_session)</span>
+
+        <span class="s3"># keep reference to magic_app to check later</span>
+        <span class="s3"># if new session should be added to this magic_app</span>
+        <span class="s1">cls.magic_apps.add(magic_app)</span>
+        <span class="s1">log.info(</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">magic_app</span><span class="s2">} </span><span class="s5">added to watchlist. </span><span class="s2">{</span><span class="s1">cls.str()</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">_match_sess_to_mapp(cls</span><span class="s2">, </span><span class="s1">magic_root_session</span><span class="s2">, </span><span class="s1">iid):</span>
+        <span class="s1">log.info(</span><span class="s5">f&quot;searching matching magic_app for: </span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+        <span class="s1">new_app_exec = magic_root_session.app_exec</span>
+        <span class="s2">for </span><span class="s1">magic_app </span><span class="s2">in </span><span class="s1">cls.magic_apps:</span>
+            <span class="s2">for </span><span class="s1">app_exec </span><span class="s2">in </span><span class="s1">magic_app.app_execs:</span>
+                <span class="s2">if </span><span class="s1">app_exec == new_app_exec:</span>
+                    <span class="s1">log.info(</span><span class="s5">f&quot;Match </span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">} </span><span class="s5">&quot;</span>
+                             <span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">magic_app</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+                    <span class="s1">magic_app.add_magic_root_session(</span>
+                        <span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_root_session)</span>
+                    <span class="s3"># return will prohibit multiple magic_apps</span>
+                    <span class="s3"># to use the same magic_root_session</span>
+                    <span class="s2">return</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">remove_session(cls</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_app=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0">&quot;&quot;&quot;magic_root_session will get removed because it is expired&quot;&quot;&quot;</span>
+        <span class="s3"># pop(iid, None) must not be necessary</span>
+        <span class="s1">magic_root_session = cls.magic_root_sessions.pop(iid)</span>
+
+        <span class="s1">log.info(</span><span class="s5">f&quot;:: removed </span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># deactivate &quot;trash&quot; solution by commenting:</span>
+        <span class="s1">cls.expired_magic_root_sessions.add(magic_root_session)</span>
+
+        <span class="s3"># unregister callback</span>
+        <span class="s3"># (magic_root_session -&gt; _MagicRootSession -&gt; IAudioSessionEvents)</span>
+        <span class="s1">magic_root_session.unregister_notification()</span>
+
+        <span class="s3"># delete iid also from magic_app or magic_session</span>
+        <span class="s2">if </span><span class="s1">cls.MagicSessionConfigured:</span>
+            <span class="s3"># pop session from magic sessions dict</span>
+            <span class="s1">del_magic_sessions = cls.magic_sessions.pop(iid)</span>
+
+            <span class="s3"># remove circular references</span>
+            <span class="s1">magic_root_session.magic_session = </span><span class="s2">None</span>
+            <span class="s1">del_magic_sessions.magic_root_session = </span><span class="s2">None</span>
+
+        <span class="s3"># try to remove session from the magic_app dict which is in possession</span>
+        <span class="s2">if </span><span class="s1">magic_app:</span>
+            <span class="s3"># pop(iid, None) must not be necessary</span>
+            <span class="s1">magic_app.magic_root_sessions.pop(iid)</span>
+
+            <span class="s3"># remove circular references</span>
+            <span class="s1">magic_root_session.magic_app = </span><span class="s2">None</span>
+
+            <span class="s1">log.info(</span><span class="s5">f&quot;:: :: removed </span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">} </span><span class="s5">from </span><span class="s2">{</span><span class="s1">magic_app</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+        <span class="s1">log.info(cls.str())</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">empty_trash(cls):</span>
+        <span class="s2">while </span><span class="s1">cls.expired_magic_root_sessions:</span>
+            <span class="s1">to_remove = cls.expired_magic_root_sessions.pop()</span>
+            <span class="s1">log.info(</span><span class="s5">&quot;:: :: :: release &lt;POINTER(IAudioSessionControl2)/&gt; &quot;</span>
+                     <span class="s5">f&quot;from </span><span class="s2">{</span><span class="s1">to_remove</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+            <span class="s3"># at this point it is already unregistered ...</span>
+            <span class="s3"># see cls.remove_session()</span>
+            <span class="s3"># to_remove.unregister_notification()</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">clean_up(cls):</span>
+        <span class="s1">log.info(</span><span class="s5">&quot;:: reverse spell&quot;</span><span class="s1">)</span>
+        <span class="s1">cls._mgr.UnregisterSessionNotification(cls._callback_magic_manager)</span>
+        <span class="s1">log.info(</span><span class="s5">f&quot;:: :: unregistered </span><span class="s2">{</span><span class="s1">cls.str()</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+        <span class="s1">cls.unregister_all()</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">unregister_all(cls):</span>
+        <span class="s3"># since cls.magic_root_sessions can always change (multithreading)</span>
+        <span class="s3"># instead of a for loop I present you the while loop:</span>
+        <span class="s3"># while cls.magic_root_sessions contains any items,</span>
+        <span class="s3"># they get popped and unregistered</span>
+        <span class="s1">log.debug(</span><span class="s5">f&quot;unregister </span><span class="s2">{</span><span class="s1">len(cls.magic_root_sessions)</span><span class="s2">} </span><span class="s5">sessions.&quot;</span><span class="s1">)</span>
+        <span class="s2">while </span><span class="s1">cls.magic_root_sessions:</span>
+            <span class="s3"># ________ REMOVES 1 ITEM FROM LIST ________</span>
+
+            <span class="s1">_</span><span class="s2">, </span><span class="s1">session = cls.magic_root_sessions.popitem()</span>
+            <span class="s1">session.unregister_notification()</span>
+            <span class="s1">log.info(</span><span class="s5">f&quot;:: :: :: unregistered </span><span class="s2">{</span><span class="s1">session</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># XXX remove old session:</span>
+        <span class="s3"># this is the only place where it works,</span>
+        <span class="s3"># since it is user controlled and not</span>
+        <span class="s3"># in a windows COM callback.</span>
+        <span class="s1">cls.empty_trash()</span>
+
+        <span class="s1">log.info(</span><span class="s5">f&quot;Bye </span><span class="s2">{</span><span class="s1">cls.str()</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+        <span class="s2">del </span><span class="s1">cls.magic_apps</span>
+        <span class="s2">del </span><span class="s1">cls.magic_sessions</span>
+
+        <span class="s1">cls.magic_activated = </span><span class="s2">None</span>
+
+
+<span class="s3"># TODO:</span>
+<span class="s3"># Make it more pythonic and beautifull</span>
+<span class="s2">def </span><span class="s1">for_session_in_sessions(func):</span>
+    <span class="s0">&quot;&quot;&quot;Decorator for looping through sessions in MagicApp.&quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">wrapper(self</span><span class="s2">, </span><span class="s1">*args):</span>
+        <span class="s2">if </span><span class="s1">self.magic_root_sessions </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s3"># nothing to change</span>
+            <span class="s2">return</span>
+
+        <span class="s3"># RuntimeError: dictionary changed size during iteration</span>
+        <span class="s1">temp_sessions = dict(self.magic_root_sessions)</span>
+        <span class="s1">rv = [</span>
+            <span class="s1">func(self</span><span class="s2">, </span><span class="s1">session</span><span class="s2">, </span><span class="s1">*args)</span>
+            <span class="s2">for </span><span class="s1">session </span><span class="s2">in </span><span class="s1">temp_sessions.values()</span>
+            <span class="s1">]</span>
+
+        <span class="s3"># max([None, None]) -&gt; TypeError: '&gt;' not supported ...</span>
+        <span class="s1">rv_no_none = [r </span><span class="s2">for </span><span class="s1">r </span><span class="s2">in </span><span class="s1">rv </span><span class="s2">if </span><span class="s1">r </span><span class="s2">is not None</span><span class="s1">]</span>
+
+        <span class="s3"># when rv = [None] -&gt; rv_no_none = None</span>
+        <span class="s2">if </span><span class="s1">rv_no_none:</span>
+            <span class="s3"># return if multiple sessions the one</span>
+            <span class="s3"># with mute true or the highest volume</span>
+            <span class="s3"># or the session with the highest AudioSessionState.value</span>
+            <span class="s2">return </span><span class="s1">max(rv_no_none)</span>
+
+    <span class="s2">return </span><span class="s1">wrapper</span>
+
+
+<span class="s2">class </span><span class="s1">_MagicAudioControl:</span>
+    <span class="s0">&quot;&quot;&quot;Simplifies the audio control by using the self.properties.&quot;&quot;&quot;</span>
+    <span class="s3"># TODO:</span>
+    <span class="s3"># (this TODO applies to MagicApp, MagicSession, for_session_in_sessions)</span>
+    <span class="s3"># handle incorrect input or raise exception.</span>
+    <span class="s3"># also handle failing com calls</span>
+    <span class="s3"># (failing in terms of the retrieved value is not 'S_OK')</span>
+    <span class="s3">#   it will happen, when the speaker is gets disconnected!</span>
+    <span class="s3">#   can be also fixed by implementing OnSessionDisconnected</span>
+    <span class="s3">#   since OnSessionDisconnected will notify if the Speaker is unplugged.</span>
+
+    <span class="s2">def </span><span class="s1">toggle_mute(self):</span>
+        <span class="s1">new_mute = </span><span class="s2">not </span><span class="s1">self.mute</span>
+        <span class="s1">self.mute = new_mute</span>
+        <span class="s2">return </span><span class="s1">new_mute</span>
+
+    <span class="s2">def </span><span class="s1">step_volume(self</span><span class="s2">, </span><span class="s1">step=</span><span class="s4">0.1</span><span class="s1">):</span>
+        <span class="s1">current = self.volume</span>
+        <span class="s2">if </span><span class="s1">current </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return</span>
+        <span class="s1">new = max(</span><span class="s4">0</span><span class="s2">, </span><span class="s1">min(</span><span class="s4">1</span><span class="s2">, </span><span class="s1">current + step))</span>
+        <span class="s2">if </span><span class="s1">new != current:</span>
+            <span class="s1">self.volume = new</span>
+            <span class="s2">return </span><span class="s1">new</span>
+
+
+<span class="s2">class </span><span class="s1">MagicApp(_MagicAudioControl):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    When instantiated with at least one app_execs name, 
+    will be able to get/ set volume etc, also if the 
+    session is created after initialize. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">guid = pointer(GUID(</span><span class="s5">'{E0BD1A40-9624-44FC-A607-2ED4F00B1CC4}'</span><span class="s1">))</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">,</span>
+                 <span class="s1">app_execs</span><span class="s2">,</span>
+                 <span class="s1">volume_callback=</span><span class="s2">None,</span>
+                 <span class="s1">advanced_volume_callback=</span><span class="s2">None,</span>
+                 <span class="s1">mute_callback=</span><span class="s2">None,</span>
+                 <span class="s1">advanced_mute_callback=</span><span class="s2">None,</span>
+                 <span class="s1">state_callback=</span><span class="s2">None,</span>
+                 <span class="s1">session_callback=</span><span class="s2">None</span><span class="s1">):</span>
+
+        <span class="s3"># normalize app_execs</span>
+        <span class="s2">if </span><span class="s1">type(app_execs) == str:</span>
+            <span class="s3"># if string directly to set: {'a', 'b', 'c'}</span>
+            <span class="s1">app_execs = (app_execs</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">self.app_execs = set(app_execs)</span>
+
+        <span class="s3"># latest dict of matching sessions</span>
+        <span class="s1">self.magic_root_sessions = {}</span>
+
+        <span class="s3"># callbacks</span>
+        <span class="s1">self.volume_callback = volume_callback</span>
+        <span class="s1">self.mute_callback = mute_callback</span>
+        <span class="s1">self.state_callback = state_callback</span>
+        <span class="s1">self.session_callback = session_callback</span>
+
+        <span class="s1">self.advanced_volume_callback = advanced_volume_callback</span>
+        <span class="s1">self.advanced_mute_callback = advanced_mute_callback</span>
+
+        <span class="s1">log.info(str(self))</span>
+        <span class="s1">MagicManager.add_magic_app(self</span><span class="s2">, </span><span class="s1">app_execs)</span>
+
+    <span class="s2">def </span><span class="s1">add_magic_root_session(self</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_root_session):</span>
+        <span class="s0">&quot;&quot;&quot;called by MagicManager, when a new matching session is found&quot;&quot;&quot;</span>
+        <span class="s1">self.magic_root_sessions[iid] = magic_root_session</span>
+        <span class="s3"># tells the magic_root_session to create a connection</span>
+        <span class="s3"># for callbacks.</span>
+        <span class="s1">magic_root_session.use_magic_app(self)</span>
+
+        <span class="s1">log.info(</span><span class="s5">f&quot;Added </span><span class="s2">{</span><span class="s1">magic_root_session</span><span class="s2">} </span><span class="s5">to </span><span class="s2">{</span><span class="s1">self</span><span class="s2">}</span><span class="s5">.&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># session callback is implemented here:</span>
+        <span class="s2">if </span><span class="s1">self.session_callback:</span>
+            <span class="s1">self.session_callback(magic_root_session)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s5">f&quot;&lt;</span><span class="s2">{</span><span class="s1">self.__class__.__name__</span><span class="s2">} </span><span class="s5">&quot;</span>
+                <span class="s5">f&quot;registered-for='</span><span class="s2">{</span><span class="s1">self.app_execs</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;controls-sessions='</span><span class="s2">{</span><span class="s1">len(self.magic_root_sessions)</span><span class="s2">}</span><span class="s5">'/&gt;&quot;</span><span class="s1">)</span>
+
+    <span class="s3"># easy control:</span>
+    <span class="s1">@property</span>
+    <span class="s1">@for_session_in_sessions</span>
+    <span class="s2">def </span><span class="s1">state(self</span><span class="s2">, </span><span class="s1">magic_root_session):</span>
+        <span class="s2">return </span><span class="s1">magic_root_session.state</span>
+
+    <span class="s1">@property</span>
+    <span class="s1">@for_session_in_sessions</span>
+    <span class="s2">def </span><span class="s1">volume(self</span><span class="s2">, </span><span class="s1">magic_root_session):</span>
+        <span class="s2">return </span><span class="s1">magic_root_session.volume</span>
+
+    <span class="s1">@volume.setter</span>
+    <span class="s1">@for_session_in_sessions</span>
+    <span class="s2">def </span><span class="s1">volume(self</span><span class="s2">, </span><span class="s1">magic_root_session</span><span class="s2">, </span><span class="s1">volume):</span>
+        <span class="s1">magic_root_session._sav.SetMasterVolume(volume</span><span class="s2">, </span><span class="s1">self.guid)</span>
+
+    <span class="s1">@property</span>
+    <span class="s1">@for_session_in_sessions</span>
+    <span class="s2">def </span><span class="s1">mute(self</span><span class="s2">, </span><span class="s1">magic_root_session):</span>
+        <span class="s2">return </span><span class="s1">magic_root_session.mute</span>
+
+    <span class="s1">@mute.setter</span>
+    <span class="s1">@for_session_in_sessions</span>
+    <span class="s2">def </span><span class="s1">mute(self</span><span class="s2">, </span><span class="s1">magic_root_session</span><span class="s2">, </span><span class="s1">mute):</span>
+        <span class="s1">magic_root_session._sav.SetMute(mute</span><span class="s2">, </span><span class="s1">self.guid)</span>
+
+
+<span class="s2">class </span><span class="s1">MagicSession(_MagicAudioControl):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    When activated and passed via 
+    MagicManager.magic_session(inherited_class_of_MagicSession) 
+    will be created for each new and current session. 
+    Dict of all iid -&gt; MagicSession: 
+        MagicManager.magic_sessions 
+    &quot;&quot;&quot;</span>
+    <span class="s1">guid = pointer(GUID(</span><span class="s5">'{34482A3D-37DD-40E3-BB37-63A16036C87C}'</span><span class="s1">))</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">,</span>
+                 <span class="s1">volume_callback=</span><span class="s2">None,</span>
+                 <span class="s1">advanced_volume_callback=</span><span class="s2">None,</span>
+                 <span class="s1">mute_callback=</span><span class="s2">None,</span>
+                 <span class="s1">advanced_mute_callback=</span><span class="s2">None,</span>
+                 <span class="s1">state_callback=</span><span class="s2">None</span><span class="s1">):</span>
+
+        <span class="s1">self.magic_root_session = self._passed_magic_root_session</span>
+        <span class="s1">self._passed_magic_root_session = </span><span class="s2">None</span>
+
+        <span class="s3"># callbacks</span>
+        <span class="s1">self.volume_callback = volume_callback</span>
+        <span class="s1">self.mute_callback = mute_callback</span>
+        <span class="s1">self.state_callback = state_callback</span>
+
+        <span class="s1">self.advanced_volume_callback = advanced_volume_callback</span>
+        <span class="s1">self.advanced_mute_callback = advanced_mute_callback</span>
+
+        <span class="s3"># tells the magic_root_session to create a connection</span>
+        <span class="s3"># for callbacks:</span>
+        <span class="s1">self.magic_root_session.use_magic_session(self)</span>
+
+        <span class="s1">log.info(str(self))</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s2">def </span><span class="s1">initialize(cls</span><span class="s2">, </span><span class="s1">new_magic_root_session</span><span class="s2">, </span><span class="s1">*args</span><span class="s2">, </span><span class="s1">**kwargs):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        is called by the MagicManager. 
+ 
+        Every new MagicSession needs to have a magic_root_session. 
+ 
+        instead of passing it visible as argument trough the inherited class 
+        back to the super().__init(new_magic_root_session) - 
+ 
+        the new_magic_root_session it is transferred by setting 
+        a class attribute and picking it up in the MagicSession.__init__() 
+ 
+        class PassingViaArg(MagicSession): 
+            def __init__(self, new_magic_root_session, *args, **kwargs): 
+                super().__init__(new_magic_root_session) 
+ 
+        class PassingViaClassAttr(MagicSession): 
+            def __init__(self, *args, **kwargs): 
+                super().__init__() 
+        &quot;&quot;&quot;</span>
+        <span class="s1">cls._passed_magic_root_session = new_magic_root_session</span>
+
+        <span class="s1">magic_session = cls(*args</span><span class="s2">, </span><span class="s1">**kwargs)</span>
+        <span class="s2">return </span><span class="s1">magic_session</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s5">f&quot;&lt;</span><span class="s2">{</span><span class="s1">self.__class__.__name__</span><span class="s2">} </span><span class="s5">&quot;</span>
+                <span class="s5">f&quot;app_exec='</span><span class="s2">{</span><span class="s1">self.magic_root_session.app_exec</span><span class="s2">}</span><span class="s5">'/&gt;&quot;</span><span class="s1">)</span>
+
+    <span class="s3"># easy control:</span>
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">state(self):</span>
+        <span class="s2">return </span><span class="s1">self.magic_root_session.state</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">volume(self):</span>
+        <span class="s2">return </span><span class="s1">self.magic_root_session.volume</span>
+
+    <span class="s1">@volume.setter</span>
+    <span class="s2">def </span><span class="s1">volume(self</span><span class="s2">, </span><span class="s1">volume):</span>
+        <span class="s1">self.magic_root_session._sav.SetMasterVolume(volume</span><span class="s2">, </span><span class="s1">self.guid)</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">mute(self):</span>
+        <span class="s2">return </span><span class="s1">self.magic_root_session.mute</span>
+
+    <span class="s1">@mute.setter</span>
+    <span class="s2">def </span><span class="s1">mute(self</span><span class="s2">, </span><span class="s1">mute):</span>
+        <span class="s1">self.magic_root_session._sav.SetMute(mute</span><span class="s2">, </span><span class="s1">self.guid)</span>
+
+
+<span class="s2">class </span><span class="s1">_MagicGuidCompare:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Helper that is passed when 'advanced_xxx_callback=True' 
+    see _MagicRootSession._send_callback() 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">master_guid</span><span class="s2">, </span><span class="s1">changer_guid):</span>
+        <span class="s3"># the pointer(GUID(&quot;guid&quot;)) of the 'master'</span>
+        <span class="s1">self.master = master_guid</span>
+        <span class="s3"># the pointer(GUID(&quot;guid&quot;)) of the 'changer'</span>
+        <span class="s1">self.changer = changer_guid</span>
+
+        <span class="s1">compare = master_guid.contents != changer_guid.contents</span>
+        <span class="s3"># True if changes are made external.</span>
+        <span class="s1">self.compare = compare</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s5">f&quot;&lt;</span><span class="s2">{</span><span class="s1">self.__class__.__name__</span><span class="s2">} </span><span class="s5">&quot;</span>
+                <span class="s5">f&quot;changed-external='</span><span class="s2">{</span><span class="s1">self.compare</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;master='</span><span class="s2">{</span><span class="s1">self.master.contents</span><span class="s2">}</span><span class="s5">' &quot;</span>
+                <span class="s5">f&quot;changer='</span><span class="s2">{</span><span class="s1">self.changer.contents</span><span class="s2">}</span><span class="s5">'/&gt;&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__bool__(self):</span>
+        <span class="s0">&quot;&quot;&quot;Returns True if changes are made external.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self.compare</span>
+
+
+<span class="s2">class </span><span class="s1">_MagicRootSession(COMObject):</span>
+    <span class="s0">&quot;&quot;&quot;Base session control with callback functionality&quot;&quot;&quot;</span>
+
+    <span class="s1">_com_interfaces_ = (IAudioSessionEvents</span><span class="s2">,</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">ctl</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">magic_manager):</span>
+        <span class="s1">self._ctl2 = ctl.QueryInterface(IAudioSessionControl2)</span>
+        <span class="s1">self.app_exec = self._get_app_exec()</span>
+        <span class="s1">self._sav = </span><span class="s2">None</span>
+        <span class="s1">self.magic_manager = magic_manager</span>
+        <span class="s1">self.iid = iid</span>
+
+        <span class="s1">self.magic_app = </span><span class="s2">None</span>
+        <span class="s1">self.magic_session = </span><span class="s2">None</span>
+
+        <span class="s1">self.volume = </span><span class="s2">None</span>
+        <span class="s1">self.mute = </span><span class="s2">None</span>
+
+        <span class="s1">new_state_id = self._ctl2.GetState()</span>
+        <span class="s1">self.state = AudioSessionState(new_state_id)</span>
+
+        <span class="s1">self._activated = </span><span class="s2">False</span>
+
+        <span class="s1">self.register_notification()</span>
+
+        <span class="s1">log.info(</span><span class="s5">f&quot;:: created </span><span class="s2">{</span><span class="s1">self</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s5">f&quot;&lt;</span><span class="s2">{</span><span class="s1">self.__class__.__name__</span><span class="s2">} </span><span class="s5">app='</span><span class="s2">{</span><span class="s1">self.app_exec</span><span class="s2">}</span><span class="s5">'/&gt;&quot;</span>
+
+    <span class="s3"># only one magic_app at the time is able to</span>
+    <span class="s3"># control and view this magic_root_session.</span>
+    <span class="s3"># a second magic_app is blocked via the MagicManager ...</span>
+    <span class="s3"># see:</span>
+    <span class="s3"># MagicManager.add_magic_app() -&gt; if not magic_root_session.magic_app</span>
+    <span class="s3"># MagicManager._match_sess_to_mapp() -&gt; return if match</span>
+
+    <span class="s3"># TODO Feature:</span>
+    <span class="s3"># allow multiple magic_app for one magic_root_session?</span>
+    <span class="s3"># If multiple magic_app would be allowed:</span>
+    <span class="s3"># Looping through multiple magic_app and checking for</span>
+    <span class="s3"># callbacks in each would cost lots of time right?</span>
+    <span class="s3"># any solution?</span>
+    <span class="s3">#</span>
+    <span class="s3"># or it could use this sessions without callbacks.</span>
+    <span class="s3">#</span>
+    <span class="s3"># also the session remove handle wouldnt work.</span>
+
+    <span class="s2">def </span><span class="s1">use_magic_app(self</span><span class="s2">, </span><span class="s1">magic_app):</span>
+        <span class="s1">self.magic_app = magic_app</span>
+        <span class="s1">self._activate()</span>
+
+    <span class="s2">def </span><span class="s1">use_magic_session(self</span><span class="s2">, </span><span class="s1">magic_session):</span>
+        <span class="s1">self.magic_session = magic_session</span>
+        <span class="s1">self._activate()</span>
+
+    <span class="s2">def </span><span class="s1">_activate(self):</span>
+        <span class="s3"># activates this magic_root_session.</span>
+        <span class="s3"># callbacks wont be &quot;ignored&quot;, and volume and mute</span>
+        <span class="s3"># will be saved to attributes.</span>
+        <span class="s2">if not </span><span class="s1">self._activated:</span>
+            <span class="s1">self._sav = self._ctl2.QueryInterface(ISimpleAudioVolume)</span>
+            <span class="s1">self.volume = self._sav.GetMasterVolume()</span>
+            <span class="s1">self.mute = self._sav.GetMute()</span>
+
+            <span class="s1">self._activated = </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">OnSimpleVolumeChanged(self</span><span class="s2">, </span><span class="s1">new_volume</span><span class="s2">, </span><span class="s1">new_mute</span><span class="s2">, </span><span class="s1">event_context):</span>
+        <span class="s0">&quot;&quot;&quot;Is fired, when the audio session volume/mute changed.&quot;&quot;&quot;</span>
+        <span class="s1">log.debug(</span><span class="s5">f&quot;OnSimpleVolumeChanged: </span><span class="s2">{</span><span class="s1">self.app_exec</span><span class="s2">} </span><span class="s5">&quot;</span>
+                  <span class="s5">f&quot;Vol: ~</span><span class="s2">{</span><span class="s1">new_volume</span><span class="s2">} </span><span class="s5">Mute: </span><span class="s2">{</span><span class="s1">new_mute</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+        <span class="s3"># only make callbacks and update internal volume and mute</span>
+        <span class="s3"># if someone is listening</span>
+
+        <span class="s2">if not </span><span class="s1">self._activated:</span>
+            <span class="s2">return</span>
+
+        <span class="s3"># check old volume vs new:</span>
+        <span class="s2">if </span><span class="s1">self.volume != new_volume:</span>
+            <span class="s3"># self.volume will keep the none state</span>
+            <span class="s3"># until self._activate()</span>
+            <span class="s1">self.volume = new_volume</span>
+
+            <span class="s3"># send callbacks, if callback exists</span>
+            <span class="s1">self._send_callback(self.magic_app</span><span class="s2">,</span>
+                                <span class="s5">&quot;volume_callback&quot;</span><span class="s2">,</span>
+                                <span class="s1">event_context</span><span class="s2">,</span>
+                                <span class="s1">new_volume)</span>
+
+            <span class="s1">self._send_callback(self.magic_session</span><span class="s2">,</span>
+                                <span class="s5">&quot;volume_callback&quot;</span><span class="s2">,</span>
+                                <span class="s1">event_context</span><span class="s2">,</span>
+                                <span class="s1">new_volume)</span>
+            <span class="s2">return</span>
+        <span class="s3"># check old mute vs new:</span>
+        <span class="s2">if </span><span class="s1">self.mute != new_mute:</span>
+            <span class="s3"># self.mute will keep the none state</span>
+            <span class="s3"># until self._activate()</span>
+            <span class="s1">self.mute = new_mute</span>
+
+            <span class="s3"># send callbacks, if callback exists</span>
+            <span class="s1">self._send_callback(self.magic_app</span><span class="s2">,</span>
+                                <span class="s5">&quot;mute_callback&quot;</span><span class="s2">,</span>
+                                <span class="s1">event_context</span><span class="s2">,</span>
+                                <span class="s1">new_mute)</span>
+
+            <span class="s1">self._send_callback(self.magic_session</span><span class="s2">,</span>
+                                <span class="s5">&quot;mute_callback&quot;</span><span class="s2">,</span>
+                                <span class="s1">event_context</span><span class="s2">,</span>
+                                <span class="s1">new_mute)</span>
+            <span class="s2">return</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s2">def </span><span class="s1">_send_callback(master</span><span class="s2">, </span><span class="s1">callback</span><span class="s2">, </span><span class="s1">changer_guid</span><span class="s2">, </span><span class="s1">value):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Send callbacks, if callback exists. 
+ 
+        The default is, that callbacks which are made 
+        by MagicApp or MagicSession get filtered out 
+ 
+        The hooks 'advanced_volume_callback' or 'advanced_mute_callback' 
+        Dont filter the callback based on the changer. 
+ 
+        The 'compare' argument is an instance of _MagicGuidCompare 
+ 
+        compare == True 
+            not: 'compare is True' 
+ 
+        if the changer guid is external. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s3"># get the callback method from the master.</span>
+        <span class="s3"># will be None if the user didnt hook into it</span>
+        <span class="s3"># or if master = None</span>
+
+        <span class="s2">if </span><span class="s1">master </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return</span>
+
+        <span class="s1">master_advanced_callback = getattr(master</span><span class="s2">, </span><span class="s5">&quot;advanced_&quot; </span><span class="s1">+ callback)</span>
+        <span class="s1">master_callback = getattr(master</span><span class="s2">, </span><span class="s1">callback)</span>
+
+        <span class="s3"># TODO: Does this safe resources, since _MagicGuidCompare is not</span>
+        <span class="s3"># always instantiated?</span>
+        <span class="s2">if </span><span class="s1">master_callback </span><span class="s2">is None and </span><span class="s1">master_advanced_callback </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s2">return</span>
+
+        <span class="s3"># create a new _MagicGuidCompare which will compare</span>
+        <span class="s3"># changer_guid and master.guid</span>
+        <span class="s1">compare = _MagicGuidCompare(master.guid</span><span class="s2">,</span>
+                                    <span class="s1">changer_guid)</span>
+
+        <span class="s2">if </span><span class="s1">master_advanced_callback:</span>
+            <span class="s1">master_advanced_callback(value</span><span class="s2">, </span><span class="s1">compare)</span>
+            <span class="s3"># TODO:</span>
+            <span class="s3"># return or allow also simple callback?</span>
+
+        <span class="s2">if </span><span class="s1">master_callback </span><span class="s2">and </span><span class="s1">compare:</span>
+            <span class="s3"># if the the callback is not caused by master.guid</span>
+            <span class="s3"># then send simple callback</span>
+            <span class="s1">master_callback(value)</span>
+
+    <span class="s2">def </span><span class="s1">OnStateChanged(self</span><span class="s2">, </span><span class="s1">new_state_id):</span>
+        <span class="s0">&quot;&quot;&quot;Is fired, when the audio session state changed.&quot;&quot;&quot;</span>
+        <span class="s1">self.state = AudioSessionState(new_state_id)</span>
+
+        <span class="s3"># send callbacks, if defined</span>
+        <span class="s2">if </span><span class="s1">self.magic_app </span><span class="s2">and </span><span class="s1">self.magic_app.state_callback:</span>
+            <span class="s1">self.magic_app.state_callback(self.state)</span>
+
+        <span class="s2">if </span><span class="s1">self.magic_session </span><span class="s2">and </span><span class="s1">self.magic_session.state_callback:</span>
+            <span class="s1">self.magic_session.state_callback(self.state)</span>
+
+        <span class="s2">if </span><span class="s1">self.state == AudioSessionState.Expired:</span>
+            <span class="s5">&quot;&quot;&quot; 
+            calling the MagicManager to remove this magic_root_session. 
+ 
+            The MagicManager will unregister_notification() 
+            &quot;&quot;&quot;</span>
+
+            <span class="s3"># XXX remove old session:</span>
+            <span class="s3"># self.magic_manager.empty_trash()</span>
+            <span class="s3"># Empty trash should do the following:</span>
+            <span class="s3"># Release &lt;POINTER(IAudioSessionControl2)</span>
+            <span class="s3"># ptr=xxxxxxxxx at xxxxxxxxx&gt;</span>
+            <span class="s3"># ... but that would only work if empty_trash()</span>
+            <span class="s3"># is triggered by the user and not via a callback</span>
+
+            <span class="s1">self.magic_manager.remove_session(self.iid</span><span class="s2">,</span>
+                                              <span class="s1">self.magic_app)</span>
+
+            <span class="s3"># XXX remove old session:</span>
+            <span class="s3"># would crash the app:</span>
+            <span class="s3"># self._ctl2 = None</span>
+            <span class="s3"># or:</span>
+            <span class="s3"># self._ctl2.Release()</span>
+
+    <span class="s2">def </span><span class="s1">_get_app_exec(self):</span>
+        <span class="s0">&quot;&quot;&quot;Returns the executable name based on the process id.&quot;&quot;&quot;</span>
+        <span class="s1">self.pid = self._ctl2.GetProcessId()</span>
+
+        <span class="s2">if </span><span class="s1">self.pid != </span><span class="s4">0</span><span class="s1">:</span>
+            <span class="s3"># try:</span>
+            <span class="s2">return </span><span class="s1">psutil.Process(self.pid).name()</span>
+            <span class="s3"># except psutil.NoSuchProcess:</span>
+            <span class="s3"># for some reason GetProcessId returned an non existing pid</span>
+
+            <span class="s3"># TODO:</span>
+            <span class="s3"># i didnt wrote the initial try, except psutil.NoSuchProcess:</span>
+            <span class="s3"># but that should not happen right?</span>
+            <span class="s3"># i never had an issue with a non existing process (besides the 0)</span>
+
+        <span class="s3"># System Sound:</span>
+        <span class="s3"># self._ctl2.GetDisplayName() returns:</span>
+        <span class="s3"># @%SystemRoot%\System32\AudioSrv.Dll,-202</span>
+        <span class="s3"># and self._ctl2.IsSystemSoundsSession() returns S_OK</span>
+        <span class="s3"># for system sounds</span>
+
+        <span class="s1">returned_HRESULT = self._ctl2.IsSystemSoundsSession()</span>
+
+        <span class="s3"># Possible returned_HRESULTs:</span>
+        <span class="s1">S_OK = </span><span class="s4">0</span>
+        <span class="s3"># S_FALSE = 1</span>
+
+        <span class="s2">if </span><span class="s1">returned_HRESULT == S_OK:</span>
+            <span class="s2">return </span><span class="s5">&quot;SndVol.exe&quot;</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">warn = (</span><span class="s5">&quot;unidentified app! &quot;</span>
+                    <span class="s5">f&quot;pid: </span><span class="s2">{</span><span class="s1">self.pid</span><span class="s2">}</span><span class="s5">, is system sound: </span><span class="s2">{</span><span class="s1">returned_HRESULT</span><span class="s2">}</span><span class="s5">&quot;</span><span class="s1">)</span>
+            <span class="s1">log.critical(warn)</span>
+            <span class="s2">raise </span><span class="s1">ValueError(warn)</span>
+
+    <span class="s3"># TODO: Feature</span>
+    <span class="s3"># implement:</span>
+    <span class="s3"># def OnSessionDisconnected(self, disconnect_reason_id): pass</span>
+
+    <span class="s2">def </span><span class="s1">register_notification(self):</span>
+        <span class="s1">self._ctl2.RegisterAudioSessionNotification(self)</span>
+
+    <span class="s2">def </span><span class="s1">unregister_notification(self):</span>
+        <span class="s1">self._ctl2.UnregisterAudioSessionNotification(self)</span>
+</pre>
+</body>
+</html>

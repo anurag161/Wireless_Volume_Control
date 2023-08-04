@@ -1,0 +1,145 @@
+<html>
+<head>
+<title>test_dispinterface.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_dispinterface.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">import </span><span class="s1">comtypes.test.TestDispServer</span>
+<span class="s0">from </span><span class="s1">comtypes.server.register </span><span class="s0">import </span><span class="s1">register  </span><span class="s2"># , unregister</span>
+<span class="s0">from </span><span class="s1">comtypes.test </span><span class="s0">import </span><span class="s1">is_resource_enabled</span>
+
+
+<span class="s0">def </span><span class="s1">setUpModule():</span>
+    <span class="s0">raise </span><span class="s1">unittest.SkipTest(</span><span class="s3">&quot;This test requires the tests to be run as admin since it tries to &quot;</span>
+                            <span class="s3">&quot;register the test COM server.  Is this a good idea?&quot;</span><span class="s1">)</span>
+
+    <span class="s2"># If this test is ever NOT skipped, then this line needs to run.  Keeping it here for posterity.</span>
+    <span class="s1">register(comtypes.test.TestDispServer.TestDispServer)</span>
+
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+
+    <span class="s0">if </span><span class="s1">is_resource_enabled(</span><span class="s3">&quot;pythoncom&quot;</span><span class="s1">):</span>
+        <span class="s0">def </span><span class="s1">test_win32com(self):</span>
+            <span class="s2"># EnsureDispatch is case-sensitive</span>
+            <span class="s0">from </span><span class="s1">win32com.client.gencache </span><span class="s0">import </span><span class="s1">EnsureDispatch</span>
+            <span class="s1">d = EnsureDispatch(</span><span class="s3">&quot;TestDispServerLib.TestDispServer&quot;</span><span class="s1">)</span>
+
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">d.eval(</span><span class="s3">&quot;__import__('comtypes.client').client.CreateObject('Scripting.Dictionary')&quot;</span><span class="s1">)</span>
+
+            <span class="s1">server_id = d.eval(</span><span class="s3">&quot;id(self)&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.id</span><span class="s0">, </span><span class="s1">server_id)</span>
+
+            <span class="s1">self.assertEqual(d.name</span><span class="s0">, </span><span class="s3">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+
+            <span class="s1">d.SetName(</span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.name</span><span class="s0">, </span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+
+            <span class="s1">d.name = </span><span class="s3">&quot;blah&quot;</span>
+            <span class="s1">self.assertEqual(d.name</span><span class="s0">, </span><span class="s3">&quot;blah&quot;</span><span class="s1">)</span>
+
+        <span class="s0">def </span><span class="s1">test_win32com_dyndispatch(self):</span>
+            <span class="s2"># dynamic Dispatch is case-IN-sensitive</span>
+            <span class="s0">from </span><span class="s1">win32com.client.dynamic </span><span class="s0">import </span><span class="s1">Dispatch</span>
+            <span class="s1">d = Dispatch(</span><span class="s3">&quot;TestDispServerLib.TestDispServer&quot;</span><span class="s1">)</span>
+
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">d.eval(</span><span class="s3">&quot;__import__('comtypes.client').client.CreateObject('Scripting.Dictionary')&quot;</span><span class="s1">)</span>
+
+            <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+            <span class="s1">server_id = d.eval(</span><span class="s3">&quot;id(self)&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.id</span><span class="s0">, </span><span class="s1">server_id)</span>
+            <span class="s1">self.assertEqual(d.ID</span><span class="s0">, </span><span class="s1">server_id)</span>
+
+            <span class="s1">self.assertEqual(d.Name</span><span class="s0">, </span><span class="s3">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.nAME</span><span class="s0">, </span><span class="s3">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+
+            <span class="s1">d.SetName(</span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(d.Name</span><span class="s0">, </span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+
+            <span class="s2"># fails.  Why?</span>
+<span class="s2">##            d.name = &quot;blah&quot;</span>
+<span class="s2">##            self.assertEqual(d.Name, &quot;blah&quot;)</span>
+
+    <span class="s0">def </span><span class="s1">test_comtypes(self):</span>
+        <span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span>
+        <span class="s1">d = CreateObject(</span><span class="s3">&quot;TestDispServerLib.TestDispServer&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.eval(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+        <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.eval2(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+        <span class="s1">d.eval(</span><span class="s3">&quot;__import__('comtypes.client').client.CreateObject('Scripting.Dictionary')&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.EVAL(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+        <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;3.14&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;1 + 2&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.EVAL2(</span><span class="s3">&quot;[1 + 2, 'foo', None]&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s4">3</span><span class="s0">, </span><span class="s3">'foo'</span><span class="s0">, None</span><span class="s1">))</span>
+
+        <span class="s1">server_id = d.eval(</span><span class="s3">&quot;id(self)&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.id</span><span class="s0">, </span><span class="s1">server_id)</span>
+        <span class="s1">self.assertEqual(d.ID</span><span class="s0">, </span><span class="s1">server_id)</span>
+
+        <span class="s1">self.assertEqual(d.Name</span><span class="s0">, </span><span class="s3">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.nAME</span><span class="s0">, </span><span class="s3">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+
+        <span class="s1">d.SetName(</span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Name</span><span class="s0">, </span><span class="s3">&quot;foo bar&quot;</span><span class="s1">)</span>
+
+        <span class="s1">d.name = </span><span class="s3">&quot;blah&quot;</span>
+        <span class="s1">self.assertEqual(d.Name</span><span class="s0">, </span><span class="s3">&quot;blah&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_withjscript(self):</span>
+        <span class="s0">import </span><span class="s1">os</span>
+        <span class="s1">jscript = os.path.join(os.path.dirname(__file__)</span><span class="s0">, </span><span class="s3">&quot;test_jscript.js&quot;</span><span class="s1">)</span>
+        <span class="s1">errcode = os.system(</span><span class="s3">&quot;cscript -nologo %s&quot; </span><span class="s1">% jscript)</span>
+        <span class="s1">self.assertEqual(errcode</span><span class="s0">, </span><span class="s4">0</span><span class="s1">)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

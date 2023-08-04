@@ -1,0 +1,70 @@
+<html>
+<head>
+<title>test_urlhistory.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_urlhistory.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span><span class="s0">, </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">copy </span><span class="s0">import </span><span class="s1">copy</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">GetModule</span><span class="s0">, </span><span class="s1">CreateObject</span>
+<span class="s0">from </span><span class="s1">comtypes.patcher </span><span class="s0">import </span><span class="s1">Patch</span>
+
+<span class="s2"># ./urlhist.tlb was downloaded somewhere from the internet (?)</span>
+
+<span class="s1">GetModule(os.path.join(os.path.dirname(__file__)</span><span class="s0">, </span><span class="s3">&quot;urlhist.tlb&quot;</span><span class="s1">))</span>
+<span class="s0">from </span><span class="s1">comtypes.gen </span><span class="s0">import </span><span class="s1">urlhistLib</span>
+
+<span class="s2"># The pwcsTitle and pwcsUrl fields of the _STATURL structure must be</span>
+<span class="s2"># freed by the caller.  The only way to do this without patching the</span>
+<span class="s2"># generated code directly is to monkey-patch the</span>
+<span class="s2"># _STATURL.__ctypes_from_outparam__ method like this.</span>
+<span class="s1">@Patch(urlhistLib._STATURL)</span>
+<span class="s0">class </span><span class="s1">_(object):</span>
+    <span class="s0">def </span><span class="s1">__ctypes_from_outparam__(self):</span>
+        <span class="s0">from </span><span class="s1">comtypes.util </span><span class="s0">import </span><span class="s1">cast_field</span>
+        <span class="s1">result = type(self)()</span>
+        <span class="s0">for </span><span class="s1">n</span><span class="s0">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">self._fields_:</span>
+            <span class="s1">setattr(result</span><span class="s0">, </span><span class="s1">n</span><span class="s0">, </span><span class="s1">getattr(self</span><span class="s0">, </span><span class="s1">n))</span>
+        <span class="s1">url</span><span class="s0">, </span><span class="s1">title = self.pwcsUrl</span><span class="s0">, </span><span class="s1">self.pwcsTitle</span>
+        <span class="s1">windll.ole32.CoTaskMemFree(cast_field(self</span><span class="s0">, </span><span class="s3">&quot;pwcsUrl&quot;</span><span class="s0">, </span><span class="s1">c_void_p))</span>
+        <span class="s1">windll.ole32.CoTaskMemFree(cast_field(self</span><span class="s0">, </span><span class="s3">&quot;pwcsTitle&quot;</span><span class="s0">, </span><span class="s1">c_void_p))</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+<span class="s0">from </span><span class="s1">comtypes.test.find_memleak </span><span class="s0">import </span><span class="s1">find_memleak</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">check_leaks(self</span><span class="s0">, </span><span class="s1">func):</span>
+        <span class="s1">bytes = find_memleak(func</span><span class="s0">, </span><span class="s1">(</span><span class="s4">5</span><span class="s0">, </span><span class="s4">10</span><span class="s1">))</span>
+        <span class="s1">self.assertFalse(bytes</span><span class="s0">, </span><span class="s3">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+    <span class="s1">@unittest.skip(</span><span class="s3">&quot;This fails with: `TypeError: iter() returned non-iterator of type 'POINTER(IEnumSTATURL)'`&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_creation(self):</span>
+        <span class="s1">hist = CreateObject(urlhistLib.UrlHistory)</span>
+        <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">hist.EnumURLS():</span>
+            <span class="s1">x.pwcsUrl</span><span class="s0">, </span><span class="s1">x.pwcsTitle</span>
+<span class="s2">##            print (x.pwcsUrl, x.pwcsTitle)</span>
+<span class="s2">##            print x</span>
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">hist.EnumURLs():</span>
+                <span class="s0">pass</span>
+        <span class="s1">doit()</span>
+        <span class="s1">self.check_leaks(doit)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

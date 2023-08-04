@@ -1,0 +1,148 @@
+<html>
+<head>
+<title>test_createwrappers.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_createwrappers.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">print_function</span>
+
+<span class="s0">import </span><span class="s1">glob</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+<span class="s0">import </span><span class="s1">comtypes.client._generate</span>
+<span class="s0">import </span><span class="s1">comtypes.typeinfo</span>
+
+
+<span class="s0">def </span><span class="s1">setUpModule():</span>
+    <span class="s0">raise </span><span class="s1">unittest.SkipTest(</span><span class="s2">&quot;I have no idea what to do with this.  It programmatically creates &quot;</span>
+                            <span class="s2">&quot;*thousands* of tests and a few dozen of them fail.&quot;</span><span class="s1">)</span>
+
+
+<span class="s3"># requires(&quot;typelibs&quot;)</span>
+
+<span class="s3"># filter warnings about interfaces without a base interface; they will</span>
+<span class="s3"># be skipped in the code generation.</span>
+<span class="s1">warnings.filterwarnings(</span><span class="s2">&quot;ignore&quot;</span><span class="s0">,</span>
+                        <span class="s2">&quot;Ignoring interface .* which has no base interface&quot;</span><span class="s0">,</span>
+                        <span class="s1">UserWarning)</span>
+
+<span class="s3"># don't print messages when typelib wrappers are generated</span>
+<span class="s1">comtypes.client._generate.__verbose__ = </span><span class="s0">False</span>
+
+<span class="s1">sysdir = os.path.join(os.environ[</span><span class="s2">&quot;SystemRoot&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s2">&quot;system32&quot;</span><span class="s1">)</span>
+
+<span class="s1">progdir = os.environ[</span><span class="s2">&quot;ProgramFiles&quot;</span><span class="s1">]</span>
+<span class="s1">common_progdir = os.environ[</span><span class="s2">&quot;CommonProgramFiles&quot;</span><span class="s1">]</span>
+
+<span class="s3"># This test takes quite some time.  It tries to build wrappers for ALL</span>
+<span class="s3"># .dll, .tlb, and .ocx files in the system directory which contain typelibs.</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">setUp(self):</span>
+        <span class="s4">&quot;Do not write the generated files into the comtypes.gen directory&quot;</span>
+        <span class="s1">comtypes.client.gen_dir = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s1">comtypes.client.gen_dir = comtypes.client._find_gen_dir()</span>
+
+<span class="s1">number = </span><span class="s5">0</span>
+
+<span class="s0">def </span><span class="s1">add_test(fname):</span>
+    <span class="s0">global </span><span class="s1">number</span>
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">comtypes.typeinfo.LoadTypeLibEx(fname)</span>
+        <span class="s0">except </span><span class="s1">WindowsError:</span>
+            <span class="s0">return</span>
+        <span class="s1">comtypes.client.GetModule(fname)</span>
+
+    <span class="s1">test.__doc__ = </span><span class="s2">&quot;test GetModule(%r)&quot; </span><span class="s1">% fname</span>
+    <span class="s1">setattr(Test</span><span class="s0">, </span><span class="s2">&quot;test_%d&quot; </span><span class="s1">% number</span><span class="s0">, </span><span class="s1">test)</span>
+    <span class="s1">number += </span><span class="s5">1</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(sysdir</span><span class="s0">, </span><span class="s2">&quot;*.ocx&quot;</span><span class="s1">)):</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(sysdir</span><span class="s0">, </span><span class="s2">&quot;*.tlb&quot;</span><span class="s1">)):</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(progdir</span><span class="s0">, </span><span class="s2">r&quot;Microsoft Office\Office*\*.tlb&quot;</span><span class="s1">)):</span>
+    <span class="s0">if </span><span class="s1">os.path.basename(fname).lower() </span><span class="s0">in </span><span class="s1">(</span>
+        <span class="s2">&quot;grde50.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s2">&quot;xl5de32.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s2">&quot;grde50.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s1">):</span>
+        <span class="s0">continue</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(progdir</span><span class="s0">, </span><span class="s2">r&quot;Microsoft Office\Office*\*.olb&quot;</span><span class="s1">)):</span>
+    <span class="s0">if </span><span class="s1">os.path.basename(fname).lower() </span><span class="s0">in </span><span class="s1">(</span>
+        <span class="s2">&quot;grde50.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s2">&quot;xl5de32.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s2">&quot;grde50.olb&quot;</span><span class="s0">, </span><span class="s3"># UnicodeEncodeError</span>
+        <span class="s1">):</span>
+        <span class="s0">continue</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s1">path = os.path.join(progdir</span><span class="s0">, </span><span class="s2">r&quot;Microsoft Visual Studio .NET 2003\Visual Studio SDKs\DIA SDK\bin\msdia71.dll&quot;</span><span class="s1">)</span>
+<span class="s0">if </span><span class="s1">os.path.isfile(path):</span>
+    <span class="s1">print(</span><span class="s2">&quot;ADD&quot;</span><span class="s0">, </span><span class="s1">path)</span>
+    <span class="s1">add_test(path)</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(common_progdir</span><span class="s0">, </span><span class="s2">r&quot;Microsoft Shared\Speech\*.dll&quot;</span><span class="s1">)):</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s0">for </span><span class="s1">fname </span><span class="s0">in </span><span class="s1">glob.glob(os.path.join(sysdir</span><span class="s0">, </span><span class="s2">&quot;*.dll&quot;</span><span class="s1">)):</span>
+    <span class="s3"># these typelibs give errors:</span>
+    <span class="s0">if </span><span class="s1">os.path.basename(fname).lower() </span><span class="s0">in </span><span class="s1">(</span>
+        <span class="s2">&quot;syncom.dll&quot;</span><span class="s0">, </span><span class="s3"># interfaces without base interface</span>
+        <span class="s2">&quot;msvidctl.dll&quot;</span><span class="s0">, </span><span class="s3"># assignment to None</span>
+        <span class="s2">&quot;scardssp.dll&quot;</span><span class="s0">, </span><span class="s3"># assertionerror sizeof()</span>
+        <span class="s2">&quot;sccsccp.dll&quot;</span><span class="s0">, </span><span class="s3"># assertionerror sizeof()</span>
+
+        <span class="s3"># Typeinfo in comsvcs.dll in XP 64-bit SP 1 is broken.</span>
+        <span class="s3"># Oleview decompiles this code snippet (^ marks are m):</span>
+        <span class="s3">#[</span>
+        <span class="s3">#  odl,</span>
+        <span class="s3">#  uuid(C7B67079-8255-42C6-9EC0-6994A3548780)</span>
+        <span class="s3">#]</span>
+        <span class="s3">#interface IAppDomainHelper : IDispatch {</span>
+        <span class="s3">#    HRESULT _stdcall pfnShutdownCB(void* pv);</span>
+        <span class="s3">#    HRESULT _stdcall Initialize(</span>
+        <span class="s3">#                    [in] IUnknown* pUnkAD,</span>
+        <span class="s3">#                    [in] IAppDomainHelper __MIDL_0028,</span>
+        <span class="s3">#                         ^^^^^^^^^^^^^^^^</span>
+        <span class="s3">#                    [in] void* pPool);</span>
+        <span class="s3">#    HRESULT _stdcall pfnCallbackCB(void* pv);</span>
+        <span class="s3">#    HRESULT _stdcall DoCallback(</span>
+        <span class="s3">#                    [in] IUnknown* pUnkAD,</span>
+        <span class="s3">#                    [in] IAppDomainHelper __MIDL_0029,</span>
+        <span class="s3">#                         ^^^^^^^^^^^^^^^^</span>
+        <span class="s3">#                    [in] void* pPool);</span>
+        <span class="s3">#};</span>
+        <span class="s2">&quot;comsvcs.dll&quot;</span><span class="s0">,</span>
+        <span class="s1">):</span>
+        <span class="s0">continue</span>
+    <span class="s1">add_test(fname)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

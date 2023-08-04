@@ -1,0 +1,38 @@
+<html>
+<head>
+<title>test_jscript.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_jscript.js</font>
+</center></td></tr></table>
+<pre><span class="s0">var </span><span class="s1">d = </span><span class="s0">new </span><span class="s1">ActiveXObject(</span><span class="s2">&quot;TestDispServerLib.TestDispServer&quot;</span><span class="s1">);</span>
+
+<span class="s3">//WScript.Echo(&quot;d.Name&quot;);</span>
+<span class="s0">if </span><span class="s1">(d.Name != </span><span class="s2">&quot;spam, spam, spam&quot;</span><span class="s1">)</span>
+  <span class="s0">throw new </span><span class="s1">Error(d.Name);</span>
+
+<span class="s3">//WScript.Echo(&quot;d.Name = 'foo'&quot;);</span>
+<span class="s1">d.Name = </span><span class="s2">&quot;foo&quot;</span><span class="s1">;</span>
+
+<span class="s3">//WScript.Echo(&quot;d.Name&quot;);</span>
+<span class="s0">if </span><span class="s1">(d.Name != </span><span class="s2">&quot;foo&quot;</span><span class="s1">)</span>
+  <span class="s0">throw new </span><span class="s1">Error(d.Name);</span>
+
+<span class="s3">//WScript.Echo(&quot;d.Eval('1 + 2')&quot;);</span>
+<span class="s0">var </span><span class="s1">result = d.Eval(</span><span class="s2">&quot;1 + 2&quot;</span><span class="s1">);</span>
+<span class="s0">if </span><span class="s1">(result != </span><span class="s4">3</span><span class="s1">)</span>
+  <span class="s0">throw new </span><span class="s1">Error(result);</span>
+</pre>
+</body>
+</html>

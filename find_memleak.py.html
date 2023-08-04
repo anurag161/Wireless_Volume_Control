@@ -1,0 +1,83 @@
+<html>
+<head>
+<title>find_memleak.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+find_memleak.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">print_function</span>
+<span class="s0">import </span><span class="s1">unittest</span><span class="s0">, </span><span class="s1">gc</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">ctypes.wintypes </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s2">################################################################</span>
+
+<span class="s0">class </span><span class="s1">PROCESS_MEMORY_COUNTERS(Structure):</span>
+    <span class="s1">_fields_ = [(</span><span class="s3">&quot;cb&quot;</span><span class="s0">, </span><span class="s1">DWORD)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;PageFaultCount&quot;</span><span class="s0">, </span><span class="s1">DWORD)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;PeakWorkingSetSize&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;WorkingSetSize&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;QuotaPeakPagedPoolUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;QuotaPagedPoolUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;QuotaPeakNonPagedPoolUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;QuotaNonPagedPoolUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;PagefileUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s3">&quot;PeakPagefileUsage&quot;</span><span class="s0">, </span><span class="s1">c_size_t)]</span>
+    <span class="s0">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.cb = sizeof(self)</span>
+
+    <span class="s0">def </span><span class="s1">dump(self):</span>
+        <span class="s0">for </span><span class="s1">n</span><span class="s0">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">self._fields_[</span><span class="s4">2</span><span class="s1">:]:</span>
+            <span class="s1">print(n</span><span class="s0">, </span><span class="s1">getattr(self</span><span class="s0">, </span><span class="s1">n)/</span><span class="s4">1e6</span><span class="s1">)</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s1">windll.psapi.GetProcessMemoryInfo.argtypes = (HANDLE</span><span class="s0">, </span><span class="s1">POINTER(PROCESS_MEMORY_COUNTERS)</span><span class="s0">, </span><span class="s1">DWORD)</span>
+<span class="s0">except </span><span class="s1">WindowsError:</span>
+    <span class="s2"># cannot search for memory leaks on Windows CE</span>
+    <span class="s0">def </span><span class="s1">find_memleak(func</span><span class="s0">, </span><span class="s1">loops=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">return </span><span class="s4">0</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">def </span><span class="s1">wss():</span>
+        <span class="s2"># Return the working set size (memory used by process)</span>
+        <span class="s1">pmi = PROCESS_MEMORY_COUNTERS()</span>
+        <span class="s0">if not </span><span class="s1">windll.psapi.GetProcessMemoryInfo(-</span><span class="s4">1</span><span class="s0">, </span><span class="s1">byref(pmi)</span><span class="s0">, </span><span class="s1">sizeof(pmi)):</span>
+            <span class="s0">raise </span><span class="s1">WinError()</span>
+        <span class="s0">return </span><span class="s1">pmi.WorkingSetSize</span>
+
+    <span class="s1">LOOPS = </span><span class="s4">10</span><span class="s0">, </span><span class="s4">1000</span>
+
+    <span class="s0">def </span><span class="s1">find_memleak(func</span><span class="s0">, </span><span class="s1">loops=LOOPS):</span>
+        <span class="s2"># call 'func' several times, so that memory consumption</span>
+        <span class="s2"># stabilizes:</span>
+        <span class="s0">for </span><span class="s1">j </span><span class="s0">in </span><span class="s1">range(loops[</span><span class="s4">0</span><span class="s1">]):</span>
+            <span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">range(loops[</span><span class="s4">1</span><span class="s1">]):</span>
+                <span class="s1">func()</span>
+        <span class="s1">gc.collect(); gc.collect(); gc.collect()</span>
+        <span class="s1">bytes = wss()</span>
+        <span class="s2"># call 'func' several times, recording the difference in</span>
+        <span class="s2"># memory consumption before and after the call.  Repeat this a</span>
+        <span class="s2"># few times, and return a list containing the memory</span>
+        <span class="s2"># consumption differences.</span>
+        <span class="s0">for </span><span class="s1">j </span><span class="s0">in </span><span class="s1">range(loops[</span><span class="s4">0</span><span class="s1">]):</span>
+            <span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">range(loops[</span><span class="s4">1</span><span class="s1">]):</span>
+                <span class="s1">func()</span>
+        <span class="s1">gc.collect(); gc.collect(); gc.collect()</span>
+        <span class="s2"># return the increased in process size</span>
+        <span class="s1">result = wss() - bytes</span>
+        <span class="s2"># Sometimes the process size did decrease, we do not report leaks</span>
+        <span class="s2"># in this case:</span>
+        <span class="s0">return </span><span class="s1">max(result</span><span class="s0">, </span><span class="s4">0</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>test_win32com_interop.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_win32com_interop.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">PyDLL</span><span class="s0">, </span><span class="s1">py_object</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s1">byref</span><span class="s0">, </span><span class="s1">POINTER</span>
+<span class="s0">from </span><span class="s1">ctypes.wintypes </span><span class="s0">import </span><span class="s1">BOOL</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IUnknown</span>
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span>
+<span class="s0">from </span><span class="s1">comtypes.automation </span><span class="s0">import </span><span class="s1">IDispatch</span>
+<span class="s0">from </span><span class="s1">comtypes.test </span><span class="s0">import </span><span class="s1">requires</span>
+
+<span class="s1">requires(</span><span class="s2">&quot;pythoncom&quot;</span><span class="s1">)</span>
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">pythoncom</span>
+    <span class="s0">import </span><span class="s1">win32com.client</span>
+    <span class="s1">skip = </span><span class="s0">False</span>
+    <span class="s3"># We use the PyCom_PyObjectFromIUnknown function in pythoncom25.dll to</span>
+    <span class="s3"># convert a comtypes COM pointer into a pythoncom COM pointer.</span>
+    <span class="s3"># Fortunately this function is exported by the dll...</span>
+    <span class="s3">#</span>
+    <span class="s3"># This is the C prototype; we must pass 'True' as third argument:</span>
+    <span class="s3">#</span>
+    <span class="s3"># PyObject *PyCom_PyObjectFromIUnknown(IUnknown *punk, REFIID riid, BOOL bAddRef)</span>
+
+    <span class="s1">_PyCom_PyObjectFromIUnknown = PyDLL(pythoncom.__file__).PyCom_PyObjectFromIUnknown</span>
+    <span class="s1">_PyCom_PyObjectFromIUnknown.restype = py_object</span>
+    <span class="s1">_PyCom_PyObjectFromIUnknown.argtypes = (POINTER(IUnknown)</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s1">BOOL)</span>
+<span class="s0">except </span><span class="s1">ImportError:</span>
+    <span class="s3"># this test depends on pythoncom but it is not available.  Maybe we should just skip it even</span>
+    <span class="s3"># if it is available since pythoncom is not a project dependency and adding tests depending</span>
+    <span class="s3"># on the vagaries of various testing environments is not deterministic.</span>
+    <span class="s3"># TODO: Evaluate if we should just remove this test or what.</span>
+    <span class="s1">skip = </span><span class="s0">True</span>
+
+
+<span class="s0">def </span><span class="s1">setUpModule():</span>
+    <span class="s0">if </span><span class="s1">skip:</span>
+        <span class="s0">raise </span><span class="s1">unittest.SkipTest(</span><span class="s2">&quot;This test requires the pythoncom library installed.  If this is &quot;</span>
+                                <span class="s2">&quot;important tests then we need to add dev dependencies to the project that include pythoncom.&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">comtypes2pywin(ptr</span><span class="s0">, </span><span class="s1">interface=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s4">&quot;&quot;&quot;Convert a comtypes pointer 'ptr' into a pythoncom 
+    PyI&lt;interface&gt; object. 
+ 
+    'interface' specifies the interface we want; it must be a comtypes 
+    interface class.  The interface must be implemented by the object; 
+    and the interface must be known to pythoncom. 
+ 
+    If 'interface' is specified, comtypes.IUnknown is used. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">interface </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">interface = IUnknown</span>
+    <span class="s0">return </span><span class="s1">_PyCom_PyObjectFromIUnknown(ptr</span><span class="s0">, </span><span class="s1">byref(interface._iid_)</span><span class="s0">, True</span><span class="s1">)</span>
+
+<span class="s3">################################################################</span>
+
+<span class="s0">def </span><span class="s1">comtypes_get_refcount(ptr):</span>
+    <span class="s4">&quot;&quot;&quot;Helper function for testing: return the COM reference count of 
+    a comtypes COM object&quot;&quot;&quot;</span>
+    <span class="s1">ptr.AddRef()</span>
+    <span class="s0">return </span><span class="s1">ptr.Release()</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMObject</span>
+
+<span class="s0">class </span><span class="s1">MyComObject(COMObject):</span>
+    <span class="s4">&quot;&quot;&quot;A completely trivial COM object implementing IDispatch. Calling 
+    any methods will return the error code E_NOTIMPL (except the 
+    IUnknown methods; they are implemented in the base class.&quot;&quot;&quot;</span>
+    <span class="s1">_com_interfaces_ = [IDispatch]</span>
+
+<span class="s3">################################################################</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s2">&quot;ie&quot;</span><span class="s1">):</span>
+            <span class="s1">self.ie.Quit()</span>
+            <span class="s0">del </span><span class="s1">self.ie</span>
+
+    <span class="s0">def </span><span class="s1">test_mycomobject(self):</span>
+        <span class="s1">o = MyComObject()</span>
+        <span class="s1">p = comtypes2pywin(o</span><span class="s0">, </span><span class="s1">IDispatch)</span>
+        <span class="s1">disp = win32com.client.Dispatch(p)</span>
+        <span class="s1">self.assertEqual(repr(disp)</span><span class="s0">, </span><span class="s2">&quot;&lt;COMObject &lt;unknown&gt;&gt;&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_ie(self):</span>
+        <span class="s3"># Convert a comtypes COM interface pointer into a win32com COM</span>
+        <span class="s3"># pointer.</span>
+        <span class="s1">ie = self.ie = CreateObject(</span><span class="s2">&quot;InternetExplorer.Application&quot;</span><span class="s1">)</span>
+        <span class="s3"># The COM refcount of the created object is 1:</span>
+        <span class="s1">self.assertEqual(comtypes_get_refcount(ie)</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s3"># IE starts invisible:</span>
+        <span class="s1">self.assertEqual(ie.Visible</span><span class="s0">, False</span><span class="s1">)</span>
+
+        <span class="s3"># Create a pythoncom PyIDispatch object from it:</span>
+        <span class="s1">p = comtypes2pywin(ie</span><span class="s0">, </span><span class="s1">interface=IDispatch)</span>
+        <span class="s1">self.assertEqual(comtypes_get_refcount(ie)</span><span class="s0">, </span><span class="s5">2</span><span class="s1">)</span>
+
+        <span class="s3"># Make it usable...</span>
+        <span class="s1">disp = win32com.client.Dispatch(p)</span>
+        <span class="s1">self.assertEqual(comtypes_get_refcount(ie)</span><span class="s0">, </span><span class="s5">2</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(disp.Visible</span><span class="s0">, False</span><span class="s1">)</span>
+
+        <span class="s3"># Cleanup and make sure that the COM refcounts are correct</span>
+        <span class="s0">del </span><span class="s1">p</span><span class="s0">, </span><span class="s1">disp</span>
+        <span class="s1">self.assertEqual(comtypes_get_refcount(ie)</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

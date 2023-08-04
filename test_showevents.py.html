@@ -1,0 +1,64 @@
+<html>
+<head>
+<title>test_showevents.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_showevents.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">doctest</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">re</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+
+
+<span class="s0">class </span><span class="s1">SixDocChecker(doctest.OutputChecker):</span>
+    <span class="s2"># see https://dirkjan.ochtman.nl/writing/2014/07/06/single-source-python-23-doctests.html</span>
+    <span class="s0">def </span><span class="s1">check_output(self</span><span class="s0">, </span><span class="s1">want</span><span class="s0">, </span><span class="s1">got</span><span class="s0">, </span><span class="s1">optionflags):</span>
+        <span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s0">, </span><span class="s3">0</span><span class="s1">):</span>
+            <span class="s1">want = re.sub(</span><span class="s4">r&quot;u'(.*?)'&quot;</span><span class="s0">, </span><span class="s4">r&quot;'\1'&quot;</span><span class="s0">, </span><span class="s1">want)</span>
+            <span class="s1">want = re.sub(</span><span class="s4">r'u&quot;(.*?)&quot;'</span><span class="s0">, </span><span class="s4">r'&quot;\1&quot;'</span><span class="s0">, </span><span class="s1">want)</span>
+        <span class="s0">return </span><span class="s1">doctest.OutputChecker.check_output(self</span><span class="s0">, </span><span class="s1">want</span><span class="s0">, </span><span class="s1">got</span><span class="s0">, </span><span class="s1">optionflags)</span>
+
+
+<span class="s0">def </span><span class="s1">load_tests(loader</span><span class="s0">, </span><span class="s1">tests</span><span class="s0">, </span><span class="s1">ignore):</span>
+    <span class="s0">import </span><span class="s1">comtypes.test.test_showevents</span>
+    <span class="s1">tests.addTests(doctest.DocTestSuite(comtypes.test.test_showevents</span><span class="s0">, </span><span class="s1">checker=SixDocChecker()))</span>
+    <span class="s0">return </span><span class="s1">tests</span>
+
+
+<span class="s0">class </span><span class="s1">ShowEventsExamples:</span>
+    <span class="s0">def </span><span class="s1">StdFont_ShowEvents(self):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        &gt;&gt;&gt; from comtypes.client import CreateObject, GetModule, ShowEvents, PumpEvents 
+        &gt;&gt;&gt; _ = GetModule('scrrun.dll')  # generating `Scripting` also generates `stdole` 
+        &gt;&gt;&gt; from comtypes.gen import stdole 
+        &gt;&gt;&gt; font = CreateObject(stdole.StdFont) 
+        &gt;&gt;&gt; conn = ShowEvents(font) 
+        # event found: FontEvents_FontChanged 
+        &gt;&gt;&gt; font.Name = 'Arial' 
+        Event FontEvents_FontChanged(None, u'Name') 
+        &gt;&gt;&gt; font.Italic = True 
+        Event FontEvents_FontChanged(None, u'Italic') 
+        &gt;&gt;&gt; PumpEvents(0.01)  # just calling. assertion does in `test_pump_events.py` 
+        &gt;&gt;&gt; conn.disconnect() 
+        &quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s4">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

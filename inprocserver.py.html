@@ -1,0 +1,161 @@
+<html>
+<head>
+<title>inprocserver.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+inprocserver.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">ctypes</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMObject</span><span class="s0">, </span><span class="s1">GUID</span>
+<span class="s0">from </span><span class="s1">comtypes.server </span><span class="s0">import </span><span class="s1">IClassFactory</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">0</span><span class="s1">):</span>
+    <span class="s0">import </span><span class="s1">winreg</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">_winreg </span><span class="s0">as </span><span class="s1">winreg</span>
+
+<span class="s1">logger = logging.getLogger(__name__)</span>
+<span class="s1">_debug = logger.debug</span>
+<span class="s1">_critical = logger.critical</span>
+
+<span class="s3">################################################################</span>
+
+<span class="s0">class </span><span class="s1">ClassFactory(COMObject):</span>
+    <span class="s1">_com_interfaces_ = [IClassFactory]</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">cls):</span>
+        <span class="s1">super(ClassFactory</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+        <span class="s1">self._cls = cls</span>
+
+    <span class="s0">def </span><span class="s1">IClassFactory_CreateInstance(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">punkOuter</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppv):</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;ClassFactory.CreateInstance(%s)&quot;</span><span class="s0">, </span><span class="s1">riid[</span><span class="s2">0</span><span class="s1">])</span>
+        <span class="s1">result = self._cls().IUnknown_QueryInterface(</span><span class="s0">None, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppv)</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;CreateInstance() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">result)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">IClassFactory_LockServer(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">fLock):</span>
+        <span class="s0">if </span><span class="s1">fLock:</span>
+            <span class="s1">COMObject.__server__.Lock()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">COMObject.__server__.Unlock()</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+<span class="s3"># will be set by py2exe boot script 'from outside'</span>
+<span class="s1">_clsid_to_class = {}</span>
+
+<span class="s0">def </span><span class="s1">inproc_find_class(clsid):</span>
+    <span class="s0">if </span><span class="s1">_clsid_to_class:</span>
+        <span class="s0">return </span><span class="s1">_clsid_to_class[clsid]</span>
+
+    <span class="s1">key = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT</span><span class="s0">, </span><span class="s4">&quot;CLSID</span><span class="s0">\\</span><span class="s4">%s</span><span class="s0">\\</span><span class="s4">InprocServer32&quot; </span><span class="s1">% clsid)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">pathdir = winreg.QueryValueEx(key</span><span class="s0">, </span><span class="s4">&quot;PythonPath&quot;</span><span class="s1">)[</span><span class="s2">0</span><span class="s1">]</span>
+    <span class="s0">except</span><span class="s1">:</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;NO path to insert&quot;</span><span class="s1">)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">pathdir </span><span class="s0">in </span><span class="s1">sys.path:</span>
+            <span class="s1">sys.path.insert(</span><span class="s2">0</span><span class="s0">, </span><span class="s1">str(pathdir))</span>
+            <span class="s1">_debug(</span><span class="s4">&quot;insert path %r&quot;</span><span class="s0">, </span><span class="s1">pathdir)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">_debug(</span><span class="s4">&quot;Already in path %r&quot;</span><span class="s0">, </span><span class="s1">pathdir)</span>
+    <span class="s1">pythonclass = winreg.QueryValueEx(key</span><span class="s0">, </span><span class="s4">&quot;PythonClass&quot;</span><span class="s1">)[</span><span class="s2">0</span><span class="s1">]</span>
+    <span class="s1">parts = pythonclass.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">)</span>
+    <span class="s1">modname = </span><span class="s4">&quot;.&quot;</span><span class="s1">.join(parts[:-</span><span class="s2">1</span><span class="s1">])</span>
+    <span class="s1">classname = parts[-</span><span class="s2">1</span><span class="s1">]</span>
+    <span class="s1">_debug(</span><span class="s4">&quot;modname: %s, classname %s&quot;</span><span class="s0">, </span><span class="s1">modname</span><span class="s0">, </span><span class="s1">classname)</span>
+    <span class="s1">__import__(modname)</span>
+    <span class="s1">mod = sys.modules[modname]</span>
+    <span class="s1">result = getattr(mod</span><span class="s0">, </span><span class="s1">classname)</span>
+    <span class="s1">_debug(</span><span class="s4">&quot;Found class %s&quot;</span><span class="s0">, </span><span class="s1">result)</span>
+    <span class="s0">return </span><span class="s1">result</span>
+
+<span class="s1">_logging_configured = </span><span class="s0">False</span>
+
+<span class="s0">def </span><span class="s1">_setup_logging(clsid):</span>
+    <span class="s5">&quot;&quot;&quot;Read from the registry, and configure the logging module. 
+ 
+    Currently, the handler (NTDebugHandler) is hardcoded. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">global </span><span class="s1">_logging_configured</span>
+    <span class="s0">if </span><span class="s1">_logging_configured:</span>
+        <span class="s0">return</span>
+    <span class="s1">_logging_configured = </span><span class="s0">True</span>
+
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">hkey = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT</span><span class="s0">, </span><span class="s4">r&quot;CLSID\%s\Logging&quot; </span><span class="s1">% clsid)</span>
+    <span class="s0">except </span><span class="s1">WindowsError:</span>
+        <span class="s0">return</span>
+    <span class="s0">from </span><span class="s1">comtypes.logutil </span><span class="s0">import </span><span class="s1">NTDebugHandler</span>
+    <span class="s1">handler = NTDebugHandler()</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">val</span><span class="s0">, </span><span class="s1">typ = winreg.QueryValueEx(hkey</span><span class="s0">, </span><span class="s4">&quot;format&quot;</span><span class="s1">)</span>
+        <span class="s1">formatter = logging.Formatter(val)</span>
+    <span class="s0">except</span><span class="s1">:</span>
+        <span class="s1">formatter = logging.Formatter(</span><span class="s4">&quot;(Thread %(thread)s):%(levelname)s:%(message)s&quot;</span><span class="s1">)</span>
+    <span class="s1">handler.setFormatter(formatter)</span>
+    <span class="s1">logging.root.addHandler(handler)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">values</span><span class="s0">, </span><span class="s1">typ = winreg.QueryValueEx(hkey</span><span class="s0">, </span><span class="s4">&quot;levels&quot;</span><span class="s1">)</span>
+    <span class="s0">except</span><span class="s1">:</span>
+        <span class="s0">return</span>
+    <span class="s0">if </span><span class="s1">typ == winreg.REG_SZ:</span>
+        <span class="s1">values = [values]</span>
+    <span class="s0">elif </span><span class="s1">typ != winreg.REG_MULTI_SZ:</span>
+        <span class="s3"># this is an error</span>
+        <span class="s0">return</span>
+    <span class="s0">for </span><span class="s1">val </span><span class="s0">in </span><span class="s1">values:</span>
+        <span class="s1">name</span><span class="s0">, </span><span class="s1">level = val.split(</span><span class="s4">&quot;=&quot;</span><span class="s1">)</span>
+        <span class="s1">level = getattr(logging</span><span class="s0">, </span><span class="s1">level)</span>
+        <span class="s1">logging.getLogger(name).setLevel(level)</span>
+
+<span class="s0">def </span><span class="s1">DllGetClassObject(rclsid</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppv):</span>
+    <span class="s1">COMObject.__run_inprocserver__()</span>
+
+    <span class="s1">iid = GUID.from_address(riid)</span>
+    <span class="s1">clsid = GUID.from_address(rclsid)</span>
+
+    <span class="s0">if not </span><span class="s1">_logging_configured:</span>
+        <span class="s1">_setup_logging(clsid)</span>
+
+    <span class="s3"># This function is directly called by C code, and receives C</span>
+    <span class="s3"># integers as parameters. rclsid is a pointer to the CLSID for the</span>
+    <span class="s3"># coclass we want to be created, riid is a pointer to the</span>
+    <span class="s3"># requested interface.</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;DllGetClassObject(clsid=%s, iid=%s)&quot;</span><span class="s0">, </span><span class="s1">clsid</span><span class="s0">, </span><span class="s1">iid)</span>
+
+        <span class="s1">cls = inproc_find_class(clsid)</span>
+        <span class="s0">if not </span><span class="s1">cls:</span>
+            <span class="s0">return </span><span class="s1">CLASS_E_CLASSNOTAVAILABLE</span>
+
+        <span class="s1">result = ClassFactory(cls).IUnknown_QueryInterface(</span><span class="s0">None, </span><span class="s1">ctypes.pointer(iid)</span><span class="s0">, </span><span class="s1">ctypes.c_void_p(ppv))</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;DllGetClassObject() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">result)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+    <span class="s0">except </span><span class="s1">Exception:</span>
+        <span class="s1">_critical(</span><span class="s4">&quot;DllGetClassObject&quot;</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">E_FAIL</span>
+
+<span class="s0">def </span><span class="s1">DllCanUnloadNow():</span>
+    <span class="s1">COMObject.__run_inprocserver__()</span>
+    <span class="s1">result = COMObject.__server__.DllCanUnloadNow()</span>
+    <span class="s3"># To avoid a memory leak when PyInitialize()/PyUninitialize() are</span>
+    <span class="s3"># called several times, we refuse to unload the dll.</span>
+    <span class="s0">return </span><span class="s1">S_FALSE</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<html>
+<head>
+<title>test_collections.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_collections.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">ArgumentError</span>
+
+<span class="s0">from </span><span class="s1">comtypes.test.find_memleak </span><span class="s0">import </span><span class="s1">find_memleak</span>
+
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+
+    <span class="s0">def </span><span class="s1">test_IEnumVARIANT(self):</span>
+        <span class="s2"># The XP firewall manager.</span>
+        <span class="s1">fwmgr = CreateObject(</span><span class="s3">'HNetCfg.FwMgr'</span><span class="s1">)</span>
+        <span class="s2"># apps has a _NewEnum property that implements IEnumVARIANT</span>
+        <span class="s1">services = fwmgr.LocalPolicy.CurrentProfile.Services</span>
+
+        <span class="s1">self.assertEqual(services.Count</span><span class="s0">, </span><span class="s1">len(services))</span>
+
+        <span class="s1">cv = iter(services)</span>
+
+        <span class="s1">names = [p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv]</span>
+        <span class="s1">self.assertEqual(len(services)</span><span class="s0">, </span><span class="s1">len(names))</span>
+
+        <span class="s2"># The iterator is consumed now:</span>
+        <span class="s1">self.assertEqual([p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv]</span><span class="s0">, </span><span class="s1">[])</span>
+
+        <span class="s2"># But we can reset it:</span>
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">self.assertEqual([p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv]</span><span class="s0">, </span><span class="s1">names)</span>
+
+        <span class="s2"># Reset, then skip:</span>
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">cv.Skip(</span><span class="s4">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual([p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv]</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">3</span><span class="s1">:])</span>
+
+        <span class="s2"># Reset, then skip:</span>
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">cv.Skip(</span><span class="s4">300</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual([p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv]</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">300</span><span class="s1">:])</span>
+
+        <span class="s2"># Hm, do we want to allow random access to the iterator?</span>
+        <span class="s2"># Should the iterator support __getitem__ ???</span>
+        <span class="s1">self.assertEqual(cv[</span><span class="s4">0</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">0</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(cv[</span><span class="s4">0</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">0</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(cv[</span><span class="s4">0</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">0</span><span class="s1">])</span>
+
+        <span class="s0">if </span><span class="s1">len(names) &gt; </span><span class="s4">1</span><span class="s1">:</span>
+            <span class="s1">self.assertEqual(cv[</span><span class="s4">1</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">1</span><span class="s1">])</span>
+            <span class="s1">self.assertEqual(cv[</span><span class="s4">1</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">1</span><span class="s1">])</span>
+            <span class="s1">self.assertEqual(cv[</span><span class="s4">1</span><span class="s1">].Name</span><span class="s0">, </span><span class="s1">names[</span><span class="s4">1</span><span class="s1">])</span>
+
+        <span class="s2"># We can now call Next(celt) with celt != 1, the call always returns a</span>
+        <span class="s2"># list:</span>
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">self.assertEqual(names[:</span><span class="s4">3</span><span class="s1">]</span><span class="s0">,</span>
+                            <span class="s1">[p.Name </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">cv.Next(</span><span class="s4">3</span><span class="s1">)])</span>
+
+        <span class="s2"># calling Next(0) makes no sense, but should work anyway:</span>
+        <span class="s1">self.assertEqual(cv.Next(</span><span class="s4">0</span><span class="s1">)</span><span class="s0">, </span><span class="s1">[])</span>
+
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">self.assertEqual(len(cv.Next(len(names) * </span><span class="s4">2</span><span class="s1">))</span><span class="s0">, </span><span class="s1">len(names))</span>
+
+        <span class="s2"># slicing is not (yet?) supported</span>
+        <span class="s1">cv.Reset()</span>
+        <span class="s1">self.assertRaises(ArgumentError</span><span class="s0">, lambda</span><span class="s1">: cv[:])</span>
+
+    <span class="s1">@unittest.skip(</span><span class="s3">&quot;This test takes a long time.  Do we need it? Can it be rewritten?&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_leaks_1(self):</span>
+        <span class="s2"># The XP firewall manager.</span>
+        <span class="s1">fwmgr = CreateObject(</span><span class="s3">'HNetCfg.FwMgr'</span><span class="s1">)</span>
+        <span class="s2"># apps has a _NewEnum property that implements IEnumVARIANT</span>
+        <span class="s1">apps = fwmgr.LocalPolicy.CurrentProfile.AuthorizedApplications</span>
+
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">iter(apps):</span>
+                <span class="s1">item.ProcessImageFileName</span>
+        <span class="s1">bytes = find_memleak(doit</span><span class="s0">, </span><span class="s1">(</span><span class="s4">20</span><span class="s0">, </span><span class="s4">20</span><span class="s1">))</span>
+        <span class="s1">self.assertFalse(bytes</span><span class="s0">, </span><span class="s3">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+    <span class="s1">@unittest.skip(</span><span class="s3">&quot;This test takes a long time.  Do we need it? Can it be rewritten?&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_leaks_2(self):</span>
+        <span class="s2"># The XP firewall manager.</span>
+        <span class="s1">fwmgr = CreateObject(</span><span class="s3">'HNetCfg.FwMgr'</span><span class="s1">)</span>
+        <span class="s2"># apps has a _NewEnum property that implements IEnumVARIANT</span>
+        <span class="s1">apps = fwmgr.LocalPolicy.CurrentProfile.AuthorizedApplications</span>
+
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s1">iter(apps).Next(</span><span class="s4">99</span><span class="s1">)</span>
+        <span class="s1">bytes = find_memleak(doit</span><span class="s0">, </span><span class="s1">(</span><span class="s4">20</span><span class="s0">, </span><span class="s4">20</span><span class="s1">))</span>
+        <span class="s1">self.assertFalse(bytes</span><span class="s0">, </span><span class="s3">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+    <span class="s1">@unittest.skip(</span><span class="s3">&quot;This test takes a long time.  Do we need it? Can it be rewritten?&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_leaks_3(self):</span>
+        <span class="s2"># The XP firewall manager.</span>
+        <span class="s1">fwmgr = CreateObject(</span><span class="s3">'HNetCfg.FwMgr'</span><span class="s1">)</span>
+        <span class="s2"># apps has a _NewEnum property that implements IEnumVARIANT</span>
+        <span class="s1">apps = fwmgr.LocalPolicy.CurrentProfile.AuthorizedApplications</span>
+
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">2</span><span class="s1">):</span>
+                <span class="s0">for </span><span class="s1">what </span><span class="s0">in </span><span class="s1">iter(apps):</span>
+                    <span class="s0">pass</span>
+        <span class="s1">bytes = find_memleak(doit</span><span class="s0">, </span><span class="s1">(</span><span class="s4">20</span><span class="s0">, </span><span class="s4">20</span><span class="s1">))</span>
+        <span class="s1">self.assertFalse(bytes</span><span class="s0">, </span><span class="s3">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+
+<span class="s0">class </span><span class="s1">TestCollectionInterface(unittest.TestCase):</span>
+    <span class="s5">&quot;&quot;&quot; Test the early-bound collection interface. &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">setUp(self):</span>
+        <span class="s1">self.d = CreateObject(</span><span class="s3">&quot;Scripting.Dictionary&quot;</span><span class="s0">, </span><span class="s1">dynamic=</span><span class="s0">False</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s0">del </span><span class="s1">self.d</span>
+
+    <span class="s0">def </span><span class="s1">assertAccessInterface(self</span><span class="s0">, </span><span class="s1">d):</span>
+        <span class="s5">&quot;&quot;&quot; Asserts access via indexing and named property &quot;&quot;&quot;</span>
+        <span class="s1">self.assertEqual(d.CompareMode</span><span class="s0">, </span><span class="s4">42</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d[</span><span class="s3">&quot;foo&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;foo&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s1">d[</span><span class="s3">&quot;foo&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(d.Item(</span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">d[</span><span class="s3">&quot;foo&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertEqual(d[</span><span class="s3">&quot;bar&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s3">&quot;spam foo&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item(</span><span class="s3">&quot;bar&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s3">&quot;spam foo&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d[</span><span class="s3">&quot;baz&quot;</span><span class="s1">]</span><span class="s0">, </span><span class="s4">3.14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item(</span><span class="s3">&quot;baz&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">d[</span><span class="s3">&quot;baz&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertIsNone(d[</span><span class="s3">&quot;asdlfkj&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertIsNone(d.Item[</span><span class="s3">&quot;asdlfkj&quot;</span><span class="s1">])</span>
+        <span class="s1">self.assertIsNone(d.Item(</span><span class="s3">&quot;asdlfkj&quot;</span><span class="s1">))</span>
+
+        <span class="s1">items = iter(d)</span>
+        <span class="s1">self.assertEqual(items[</span><span class="s4">0</span><span class="s1">]</span><span class="s0">, </span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(items[</span><span class="s4">1</span><span class="s1">]</span><span class="s0">, </span><span class="s3">&quot;bar&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(items[</span><span class="s4">2</span><span class="s1">]</span><span class="s0">, </span><span class="s3">&quot;baz&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(items[</span><span class="s4">3</span><span class="s1">]</span><span class="s0">, </span><span class="s3">&quot;asdlfkj&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_index_setter(self):</span>
+        <span class="s1">d = self.d</span>
+        <span class="s1">d.CompareMode = </span><span class="s4">42</span>
+        <span class="s1">d[</span><span class="s3">&quot;foo&quot;</span><span class="s1">] = </span><span class="s4">1</span>
+        <span class="s1">d[</span><span class="s3">&quot;bar&quot;</span><span class="s1">] = </span><span class="s3">&quot;spam foo&quot;</span>
+        <span class="s1">d[</span><span class="s3">&quot;baz&quot;</span><span class="s1">] = </span><span class="s4">3.14</span>
+        <span class="s1">self.assertAccessInterface(d)</span>
+
+    <span class="s0">def </span><span class="s1">test_named_property_setter(self):</span>
+        <span class="s1">d = self.d</span>
+        <span class="s1">d.CompareMode = </span><span class="s4">42</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;foo&quot;</span><span class="s1">] = </span><span class="s4">1</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;bar&quot;</span><span class="s1">] = </span><span class="s3">&quot;spam foo&quot;</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;baz&quot;</span><span class="s1">] = </span><span class="s4">3.14</span>
+        <span class="s1">self.assertAccessInterface(d)</span>
+
+    <span class="s0">def </span><span class="s1">test_named_property_no_length(self):</span>
+        <span class="s1">self.assertRaises(TypeError</span><span class="s0">, </span><span class="s1">len</span><span class="s0">, </span><span class="s1">self.d.Item)</span>
+
+    <span class="s0">def </span><span class="s1">test_named_property_not_iterable(self):</span>
+        <span class="s1">self.assertRaises(TypeError</span><span class="s0">, </span><span class="s1">list</span><span class="s0">, </span><span class="s1">self.d.Item)</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

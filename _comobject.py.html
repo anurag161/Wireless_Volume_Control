@@ -1,0 +1,802 @@
+<html>
+<head>
+<title>_comobject.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #808080;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_comobject.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">FormatError</span><span class="s0">, </span><span class="s1">POINTER</span><span class="s0">, </span><span class="s1">Structure</span><span class="s0">, </span><span class="s1">WINFUNCTYPE</span><span class="s0">, </span><span class="s1">byref</span><span class="s0">, </span><span class="s1">c_long</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">,</span>
+    <span class="s1">oledll</span><span class="s0">, </span><span class="s1">pointer</span><span class="s0">, </span><span class="s1">windll</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">_ctypes </span><span class="s0">import </span><span class="s1">CopyComPointer</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMError</span><span class="s0">, </span><span class="s1">ReturnHRESULT</span><span class="s0">, </span><span class="s1">instancemethod</span><span class="s0">, </span><span class="s1">_encode_idl</span>
+<span class="s0">from </span><span class="s1">comtypes.errorinfo </span><span class="s0">import </span><span class="s1">ISupportErrorInfo</span><span class="s0">, </span><span class="s1">ReportException</span><span class="s0">, </span><span class="s1">ReportError</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IPersist</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">DISP_E_BADINDEX</span><span class="s0">, </span><span class="s1">DISP_E_MEMBERNOTFOUND</span><span class="s0">, </span><span class="s1">E_FAIL</span><span class="s0">, </span><span class="s1">E_NOINTERFACE</span><span class="s0">,</span>
+    <span class="s1">E_INVALIDARG</span><span class="s0">, </span><span class="s1">E_NOTIMPL</span><span class="s0">, </span><span class="s1">RPC_E_CHANGED_MODE</span><span class="s0">, </span><span class="s1">S_FALSE</span><span class="s0">, </span><span class="s1">S_OK</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">comtypes.typeinfo </span><span class="s0">import </span><span class="s1">IProvideClassInfo</span><span class="s0">, </span><span class="s1">IProvideClassInfo2</span>
+
+
+<span class="s1">logger = logging.getLogger(__name__)</span>
+<span class="s1">_debug = logger.debug</span>
+<span class="s1">_warning = logger.warning</span>
+<span class="s1">_error = logger.error</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">0</span><span class="s1">):</span>
+    <span class="s1">int_types = (int</span><span class="s0">, </span><span class="s1">)</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">int_types = (int</span><span class="s0">, </span><span class="s1">long)</span>
+
+<span class="s3">################################################################</span>
+<span class="s3"># COM object implementation</span>
+
+<span class="s3"># so we don't have to import comtypes.automation</span>
+<span class="s1">DISPATCH_METHOD = </span><span class="s2">1</span>
+<span class="s1">DISPATCH_PROPERTYGET = </span><span class="s2">2</span>
+<span class="s1">DISPATCH_PROPERTYPUT = </span><span class="s2">4</span>
+<span class="s1">DISPATCH_PROPERTYPUTREF = </span><span class="s2">8</span>
+
+
+<span class="s0">class </span><span class="s1">E_NotImplemented(Exception):</span>
+    <span class="s4">&quot;&quot;&quot;COM method is not implemented&quot;&quot;&quot;</span>
+
+
+<span class="s0">def </span><span class="s1">HRESULT_FROM_WIN32(errcode):</span>
+    <span class="s4">&quot;Convert a Windows error code into a HRESULT value.&quot;</span>
+    <span class="s0">if </span><span class="s1">errcode </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s2">0x80000000</span>
+    <span class="s0">if </span><span class="s1">errcode &amp; </span><span class="s2">0x80000000</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">errcode</span>
+    <span class="s0">return </span><span class="s1">(errcode &amp; </span><span class="s2">0xFFFF</span><span class="s1">) | </span><span class="s2">0x80070000</span>
+
+
+<span class="s0">def </span><span class="s1">winerror(exc):</span>
+    <span class="s4">&quot;&quot;&quot;Return the windows error code from a WindowsError or COMError 
+    instance.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">isinstance(exc</span><span class="s0">, </span><span class="s1">COMError):</span>
+        <span class="s0">return </span><span class="s1">exc.hresult</span>
+    <span class="s0">elif </span><span class="s1">isinstance(exc</span><span class="s0">, </span><span class="s1">WindowsError):</span>
+        <span class="s1">code = exc.winerror</span>
+        <span class="s0">if </span><span class="s1">isinstance(code</span><span class="s0">, </span><span class="s1">int_types):</span>
+            <span class="s0">return </span><span class="s1">code</span>
+        <span class="s3"># Sometimes, a WindowsError instance has no error code.  An access</span>
+        <span class="s3"># violation raised by ctypes has only text, for example.  In this</span>
+        <span class="s3"># cases we return a generic error code.</span>
+        <span class="s0">return </span><span class="s1">E_FAIL</span>
+    <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s5">&quot;Expected comtypes.COMERROR or WindowsError instance, got %s&quot; </span><span class="s1">% type(exc).__name__)</span>
+
+
+<span class="s0">def </span><span class="s1">_do_implement(interface_name</span><span class="s0">, </span><span class="s1">method_name):</span>
+    <span class="s0">def </span><span class="s1">_not_implemented(*args):</span>
+        <span class="s4">&quot;&quot;&quot;Return E_NOTIMPL because the method is not implemented.&quot;&quot;&quot;</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;unimplemented method %s_%s called&quot;</span><span class="s0">, </span><span class="s1">interface_name</span><span class="s0">,</span>
+               <span class="s1">method_name)</span>
+        <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+    <span class="s0">return </span><span class="s1">_not_implemented</span>
+
+
+<span class="s0">def </span><span class="s1">catch_errors(obj</span><span class="s0">, </span><span class="s1">mth</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname):</span>
+    <span class="s1">clsid = getattr(obj</span><span class="s0">, </span><span class="s5">&quot;_reg_clsid_&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">call_with_this(*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">result = mth(*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+        <span class="s0">except </span><span class="s1">ReturnHRESULT </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s1">(hresult</span><span class="s0">, </span><span class="s1">text) = err.args</span>
+            <span class="s0">return </span><span class="s1">ReportError(text</span><span class="s0">, </span><span class="s1">iid=interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid</span><span class="s0">,</span>
+                               <span class="s1">hresult=hresult)</span>
+        <span class="s0">except </span><span class="s1">(COMError</span><span class="s0">, </span><span class="s1">WindowsError) </span><span class="s0">as </span><span class="s1">details:</span>
+            <span class="s1">_error(</span><span class="s5">&quot;Exception in %s.%s implementation:&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                   <span class="s1">mthname</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">HRESULT_FROM_WIN32(winerror(details))</span>
+        <span class="s0">except </span><span class="s1">E_NotImplemented:</span>
+            <span class="s1">_warning(</span><span class="s5">&quot;Unimplemented method %s.%s called&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                     <span class="s1">mthname)</span>
+            <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s1">_error(</span><span class="s5">&quot;Exception in %s.%s implementation:&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                   <span class="s1">mthname</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">ReportException(E_FAIL</span><span class="s0">, </span><span class="s1">interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid)</span>
+        <span class="s0">if </span><span class="s1">result </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">S_OK</span>
+        <span class="s0">return </span><span class="s1">result</span>
+    <span class="s0">if </span><span class="s1">paramflags </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">has_outargs = </span><span class="s0">False</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">has_outargs = bool([x[</span><span class="s2">0</span><span class="s1">] </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">paramflags</span>
+                            <span class="s0">if </span><span class="s1">x[</span><span class="s2">0</span><span class="s1">] &amp; </span><span class="s2">2</span><span class="s1">])</span>
+    <span class="s1">call_with_this.has_outargs = has_outargs</span>
+    <span class="s0">return </span><span class="s1">call_with_this</span>
+
+
+<span class="s3">################################################################</span>
+
+<span class="s0">def </span><span class="s1">hack(inst</span><span class="s0">, </span><span class="s1">mth</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname):</span>
+    <span class="s0">if </span><span class="s1">paramflags </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">catch_errors(inst</span><span class="s0">, </span><span class="s1">mth</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname)</span>
+    <span class="s1">code = mth.__code__</span>
+    <span class="s0">if </span><span class="s1">code.co_varnames[</span><span class="s2">1</span><span class="s1">:</span><span class="s2">2</span><span class="s1">] == (</span><span class="s5">&quot;this&quot;</span><span class="s0">,</span><span class="s1">):</span>
+        <span class="s0">return </span><span class="s1">catch_errors(inst</span><span class="s0">, </span><span class="s1">mth</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname)</span>
+    <span class="s1">dirflags = [f[</span><span class="s2">0</span><span class="s1">] </span><span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">paramflags]</span>
+    <span class="s3"># An argument is an input arg either if flags are NOT set in the</span>
+    <span class="s3"># idl file, or if the flags contain 'in'. In other words, the</span>
+    <span class="s3"># direction flag is either exactly '0' or has the '1' bit set:</span>
+    <span class="s3"># Output arguments have flag '2'</span>
+
+    <span class="s1">args_out_idx = []</span>
+    <span class="s1">args_in_idx = []</span>
+    <span class="s0">for </span><span class="s1">i</span><span class="s0">, </span><span class="s1">a </span><span class="s0">in </span><span class="s1">enumerate(dirflags):</span>
+        <span class="s0">if </span><span class="s1">a&amp;</span><span class="s2">2</span><span class="s1">:</span>
+            <span class="s1">args_out_idx.append(i)</span>
+        <span class="s0">if </span><span class="s1">a&amp;</span><span class="s2">1 </span><span class="s0">or </span><span class="s1">a==</span><span class="s2">0</span><span class="s1">:</span>
+            <span class="s1">args_in_idx.append(i)</span>
+    <span class="s1">args_out = len(args_out_idx)</span>
+
+    <span class="s3">## XXX Remove this:</span>
+<span class="s3">##    if args_in != code.co_argcount - 1:</span>
+<span class="s3">##        return catch_errors(inst, mth, interface, mthname)</span>
+
+    <span class="s1">clsid = getattr(inst</span><span class="s0">, </span><span class="s5">&quot;_reg_clsid_&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">call_without_this(this</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s3"># Method implementations could check for and return E_POINTER</span>
+        <span class="s3"># themselves.  Or an error will be raised when</span>
+        <span class="s3"># 'outargs[i][0] = value' is executed.</span>
+<span class="s3">##        for a in outargs:</span>
+<span class="s3">##            if not a:</span>
+<span class="s3">##                return E_POINTER</span>
+
+        <span class="s3">#make argument list for handler by index array built above</span>
+        <span class="s1">inargs = []</span>
+        <span class="s0">for </span><span class="s1">a </span><span class="s0">in </span><span class="s1">args_in_idx:</span>
+            <span class="s1">inargs.append(args[a])</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">result = mth(*inargs)</span>
+            <span class="s0">if </span><span class="s1">args_out == </span><span class="s2">1</span><span class="s1">:</span>
+                <span class="s1">args[args_out_idx[</span><span class="s2">0</span><span class="s1">]][</span><span class="s2">0</span><span class="s1">] = result</span>
+            <span class="s0">elif </span><span class="s1">args_out != </span><span class="s2">0</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">len(result) != args_out:</span>
+                    <span class="s1">msg = </span><span class="s5">&quot;Method should have returned a %s-tuple&quot; </span><span class="s1">% args_out</span>
+                    <span class="s0">raise </span><span class="s1">ValueError(msg)</span>
+                <span class="s0">for </span><span class="s1">i</span><span class="s0">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">enumerate(result):</span>
+                    <span class="s1">args[args_out_idx[i]][</span><span class="s2">0</span><span class="s1">] = value</span>
+        <span class="s0">except </span><span class="s1">ReturnHRESULT </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s1">(hresult</span><span class="s0">, </span><span class="s1">text) = err.args</span>
+            <span class="s0">return </span><span class="s1">ReportError(text</span><span class="s0">, </span><span class="s1">iid=interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid</span><span class="s0">,</span>
+                               <span class="s1">hresult=hresult)</span>
+        <span class="s0">except </span><span class="s1">COMError </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s1">(hr</span><span class="s0">, </span><span class="s1">text</span><span class="s0">, </span><span class="s1">details) = err.args</span>
+            <span class="s1">_error(</span><span class="s5">&quot;Exception in %s.%s implementation:&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                   <span class="s1">mthname</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">descr</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">helpfile</span><span class="s0">, </span><span class="s1">helpcontext</span><span class="s0">, </span><span class="s1">progid = details</span>
+            <span class="s0">except </span><span class="s1">(ValueError</span><span class="s0">, </span><span class="s1">TypeError):</span>
+                <span class="s1">msg = str(details)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">msg = </span><span class="s5">&quot;%s: %s&quot; </span><span class="s1">% (source</span><span class="s0">, </span><span class="s1">descr)</span>
+            <span class="s1">hr = HRESULT_FROM_WIN32(hr)</span>
+            <span class="s0">return </span><span class="s1">ReportError(msg</span><span class="s0">, </span><span class="s1">iid=interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid</span><span class="s0">,</span>
+                               <span class="s1">hresult=hr)</span>
+        <span class="s0">except </span><span class="s1">WindowsError </span><span class="s0">as </span><span class="s1">details:</span>
+            <span class="s1">_error(</span><span class="s5">&quot;Exception in %s.%s implementation:&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                   <span class="s1">mthname</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s1">hr = HRESULT_FROM_WIN32(winerror(details))</span>
+            <span class="s0">return </span><span class="s1">ReportException(hr</span><span class="s0">, </span><span class="s1">interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid)</span>
+        <span class="s0">except </span><span class="s1">E_NotImplemented:</span>
+            <span class="s1">_warning(</span><span class="s5">&quot;Unimplemented method %s.%s called&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                     <span class="s1">mthname)</span>
+            <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s1">_error(</span><span class="s5">&quot;Exception in %s.%s implementation:&quot;</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+                   <span class="s1">mthname</span><span class="s0">, </span><span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">ReportException(E_FAIL</span><span class="s0">, </span><span class="s1">interface._iid_</span><span class="s0">, </span><span class="s1">clsid=clsid)</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+    <span class="s0">if </span><span class="s1">args_out:</span>
+        <span class="s1">call_without_this.has_outargs = </span><span class="s0">True</span>
+    <span class="s0">return </span><span class="s1">call_without_this</span>
+
+
+<span class="s0">class </span><span class="s1">_MethodFinder(object):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">inst):</span>
+        <span class="s1">self.inst = inst</span>
+        <span class="s3"># map lower case names to names with correct spelling.</span>
+        <span class="s1">self.names = dict([(n.lower()</span><span class="s0">, </span><span class="s1">n) </span><span class="s0">for </span><span class="s1">n </span><span class="s0">in </span><span class="s1">dir(inst)])</span>
+
+    <span class="s0">def </span><span class="s1">get_impl(self</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags):</span>
+        <span class="s1">mth = self.find_impl(interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags)</span>
+        <span class="s0">if </span><span class="s1">mth </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">_do_implement(interface.__name__</span><span class="s0">, </span><span class="s1">mthname)</span>
+        <span class="s0">return </span><span class="s1">hack(self.inst</span><span class="s0">, </span><span class="s1">mth</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname)</span>
+
+    <span class="s0">def </span><span class="s1">find_method(self</span><span class="s0">, </span><span class="s1">fq_name</span><span class="s0">, </span><span class="s1">mthname):</span>
+        <span class="s3"># Try to find a method, first with the fully qualified name</span>
+        <span class="s3"># ('IUnknown_QueryInterface'), if that fails try the simple</span>
+        <span class="s3"># name ('QueryInterface')</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">getattr(self.inst</span><span class="s0">, </span><span class="s1">fq_name)</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">pass</span>
+        <span class="s0">return </span><span class="s1">getattr(self.inst</span><span class="s0">, </span><span class="s1">mthname)</span>
+
+    <span class="s0">def </span><span class="s1">find_impl(self</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags):</span>
+        <span class="s1">fq_name = </span><span class="s5">&quot;%s_%s&quot; </span><span class="s1">% (interface.__name__</span><span class="s0">, </span><span class="s1">mthname)</span>
+        <span class="s0">if </span><span class="s1">interface._case_insensitive_:</span>
+            <span class="s3"># simple name, like 'QueryInterface'</span>
+            <span class="s1">mthname = self.names.get(mthname.lower()</span><span class="s0">, </span><span class="s1">mthname)</span>
+            <span class="s3"># qualified name, like 'IUnknown_QueryInterface'</span>
+            <span class="s1">fq_name = self.names.get(fq_name.lower()</span><span class="s0">, </span><span class="s1">fq_name)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.find_method(fq_name</span><span class="s0">, </span><span class="s1">mthname)</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">pass</span>
+        <span class="s1">propname = mthname[</span><span class="s2">5</span><span class="s1">:]  </span><span class="s3"># strip the '_get_' or '_set' prefix</span>
+        <span class="s0">if </span><span class="s1">interface._case_insensitive_:</span>
+            <span class="s1">propname = self.names.get(propname.lower()</span><span class="s0">, </span><span class="s1">propname)</span>
+        <span class="s3"># propput and propget is done with 'normal' attribute access,</span>
+        <span class="s3"># but only for COM properties that do not take additional</span>
+        <span class="s3"># arguments:</span>
+
+        <span class="s0">if </span><span class="s5">&quot;propget&quot; </span><span class="s0">in </span><span class="s1">idlflags </span><span class="s0">and </span><span class="s1">len(paramflags) == </span><span class="s2">1</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.getter(propname)</span>
+        <span class="s0">if </span><span class="s5">&quot;propput&quot; </span><span class="s0">in </span><span class="s1">idlflags </span><span class="s0">and </span><span class="s1">len(paramflags) == </span><span class="s2">1</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.setter(propname)</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;%r: %s.%s not implemented&quot;</span><span class="s0">, </span><span class="s1">self.inst</span><span class="s0">, </span><span class="s1">interface.__name__</span><span class="s0">,</span>
+               <span class="s1">mthname)</span>
+        <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">setter(self</span><span class="s0">, </span><span class="s1">propname):</span>
+        <span class="s3">#</span>
+        <span class="s0">def </span><span class="s1">set(self</span><span class="s0">, </span><span class="s1">value):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s3"># XXX this may not be correct is the object implements</span>
+                <span class="s3"># _get_PropName but not _set_PropName</span>
+                <span class="s1">setattr(self</span><span class="s0">, </span><span class="s1">propname</span><span class="s0">, </span><span class="s1">value)</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s0">raise </span><span class="s1">E_NotImplemented()</span>
+        <span class="s0">return </span><span class="s1">instancemethod(set</span><span class="s0">, </span><span class="s1">self.inst</span><span class="s0">, </span><span class="s1">type(self.inst))</span>
+
+    <span class="s0">def </span><span class="s1">getter(self</span><span class="s0">, </span><span class="s1">propname):</span>
+        <span class="s0">def </span><span class="s1">get(self):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">return </span><span class="s1">getattr(self</span><span class="s0">, </span><span class="s1">propname)</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s0">raise </span><span class="s1">E_NotImplemented()</span>
+        <span class="s0">return </span><span class="s1">instancemethod(get</span><span class="s0">, </span><span class="s1">self.inst</span><span class="s0">, </span><span class="s1">type(self.inst))</span>
+
+
+<span class="s0">def </span><span class="s1">_create_vtbl_type(fields</span><span class="s0">, </span><span class="s1">itf):</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">return </span><span class="s1">_vtbl_types[fields]</span>
+    <span class="s0">except </span><span class="s1">KeyError:</span>
+        <span class="s0">class </span><span class="s1">Vtbl(Structure):</span>
+            <span class="s1">_fields_ = fields</span>
+        <span class="s1">Vtbl.__name__ = </span><span class="s5">&quot;Vtbl_%s&quot; </span><span class="s1">% itf.__name__</span>
+        <span class="s1">_vtbl_types[fields] = Vtbl</span>
+        <span class="s0">return </span><span class="s1">Vtbl</span>
+
+<span class="s3"># Ugh. Another type cache to avoid leaking types.</span>
+<span class="s1">_vtbl_types = {}</span>
+
+<span class="s3">################################################################</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s1">_InterlockedIncrement = windll.kernel32.InterlockedIncrement</span>
+    <span class="s1">_InterlockedDecrement = windll.kernel32.InterlockedDecrement</span>
+<span class="s0">except </span><span class="s1">AttributeError:</span>
+    <span class="s0">import </span><span class="s1">threading</span>
+    <span class="s1">_lock = threading.Lock()</span>
+    <span class="s1">_acquire = _lock.acquire</span>
+    <span class="s1">_release = _lock.release</span>
+    <span class="s3"># win 64 doesn't have these functions</span>
+
+    <span class="s0">def </span><span class="s1">_InterlockedIncrement(ob):</span>
+        <span class="s1">_acquire()</span>
+        <span class="s1">refcnt = ob.value + </span><span class="s2">1</span>
+        <span class="s1">ob.value = refcnt</span>
+        <span class="s1">_release()</span>
+        <span class="s0">return </span><span class="s1">refcnt</span>
+
+    <span class="s0">def </span><span class="s1">_InterlockedDecrement(ob):</span>
+        <span class="s1">_acquire()</span>
+        <span class="s1">refcnt = ob.value - </span><span class="s2">1</span>
+        <span class="s1">ob.value = refcnt</span>
+        <span class="s1">_release()</span>
+        <span class="s0">return </span><span class="s1">refcnt</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">_InterlockedIncrement.argtypes = [POINTER(c_long)]</span>
+    <span class="s1">_InterlockedDecrement.argtypes = [POINTER(c_long)]</span>
+    <span class="s1">_InterlockedIncrement.restype = c_long</span>
+    <span class="s1">_InterlockedDecrement.restype = c_long</span>
+
+
+<span class="s0">class </span><span class="s1">LocalServer(object):</span>
+
+    <span class="s1">_queue = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">run(self</span><span class="s0">, </span><span class="s1">classobjects):</span>
+        <span class="s3"># Use windll instead of oledll so that we don't get an</span>
+        <span class="s3"># exception on a FAILED hresult:</span>
+        <span class="s1">result = windll.ole32.CoInitialize(</span><span class="s0">None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">RPC_E_CHANGED_MODE == result:</span>
+            <span class="s3"># we're running in MTA: no message pump needed</span>
+            <span class="s1">_debug(</span><span class="s5">&quot;Server running in MTA&quot;</span><span class="s1">)</span>
+            <span class="s1">self.run_mta()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s3"># we're running in STA: need a message pump</span>
+            <span class="s1">_debug(</span><span class="s5">&quot;Server running in STA&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">result &gt;= </span><span class="s2">0</span><span class="s1">:</span>
+                <span class="s3"># we need a matching CoUninitialize() call for a successful</span>
+                <span class="s3"># CoInitialize().</span>
+                <span class="s1">windll.ole32.CoUninitialize()</span>
+            <span class="s1">self.run_sta()</span>
+
+        <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">classobjects:</span>
+            <span class="s1">obj._revoke_class()</span>
+
+    <span class="s0">def </span><span class="s1">run_sta(self):</span>
+        <span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">messageloop</span>
+        <span class="s1">messageloop.run()</span>
+
+    <span class="s0">def </span><span class="s1">run_mta(self):</span>
+        <span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">0</span><span class="s1">):</span>
+            <span class="s0">import </span><span class="s1">queue</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">import </span><span class="s1">Queue </span><span class="s0">as </span><span class="s1">queue</span>
+        <span class="s1">self._queue = queue.Queue()</span>
+        <span class="s1">self._queue.get()</span>
+
+    <span class="s0">def </span><span class="s1">Lock(self):</span>
+        <span class="s1">oledll.ole32.CoAddRefServerProcess()</span>
+
+    <span class="s0">def </span><span class="s1">Unlock(self):</span>
+        <span class="s1">rc = oledll.ole32.CoReleaseServerProcess()</span>
+        <span class="s0">if </span><span class="s1">rc == </span><span class="s2">0</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">self._queue:</span>
+                <span class="s1">self._queue.put(</span><span class="s2">42</span><span class="s1">)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">windll.user32.PostQuitMessage(</span><span class="s2">0</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">InprocServer(object):</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.locks = c_long(</span><span class="s2">0</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">Lock(self):</span>
+        <span class="s1">_InterlockedIncrement(self.locks)</span>
+
+    <span class="s0">def </span><span class="s1">Unlock(self):</span>
+        <span class="s1">_InterlockedDecrement(self.locks)</span>
+
+    <span class="s0">def </span><span class="s1">DllCanUnloadNow(self):</span>
+        <span class="s0">if </span><span class="s1">self.locks.value:</span>
+            <span class="s0">return </span><span class="s1">S_FALSE</span>
+        <span class="s0">if </span><span class="s1">COMObject._instances_:</span>
+            <span class="s0">return </span><span class="s1">S_FALSE</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+
+<span class="s0">class </span><span class="s1">COMObject(object):</span>
+    <span class="s1">_instances_ = {}</span>
+
+    <span class="s0">def </span><span class="s1">__new__(cls</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s1">self = super(COMObject</span><span class="s0">, </span><span class="s1">cls).__new__(cls)</span>
+        <span class="s0">if </span><span class="s1">isinstance(self</span><span class="s0">, </span><span class="s1">c_void_p):</span>
+            <span class="s3"># We build the VTables only for direct instances of</span>
+            <span class="s3"># CoClass, not for POINTERs to CoClass.</span>
+            <span class="s0">return </span><span class="s1">self</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">&quot;_com_interfaces_&quot;</span><span class="s1">):</span>
+            <span class="s1">self.__prepare_comobject()</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+    <span class="s0">def </span><span class="s1">__prepare_comobject(self):</span>
+        <span class="s3"># When a CoClass instance is created, COM pointers to all</span>
+        <span class="s3"># interfaces are created.  Also, the CoClass must be kept alive as</span>
+        <span class="s3"># until the COM reference count drops to zero, even if no Python</span>
+        <span class="s3"># code keeps a reference to the object.</span>
+        <span class="s3">#</span>
+        <span class="s3"># The _com_pointers_ instance variable maps string interface iids</span>
+        <span class="s3"># to C compatible COM pointers.</span>
+        <span class="s1">self._com_pointers_ = {}</span>
+        <span class="s3"># COM refcount starts at zero.</span>
+        <span class="s1">self._refcnt = c_long(</span><span class="s2">0</span><span class="s1">)</span>
+
+        <span class="s3"># Some interfaces have a default implementation in COMObject:</span>
+        <span class="s3"># - ISupportErrorInfo</span>
+        <span class="s3"># - IPersist (if the subclass has a _reg_clsid_ attribute)</span>
+        <span class="s3"># - IProvideClassInfo (if the subclass has a _reg_clsid_ attribute)</span>
+        <span class="s3"># - IProvideClassInfo2 (if the subclass has a _outgoing_interfaces_</span>
+        <span class="s3">#   attribute)</span>
+        <span class="s3">#</span>
+        <span class="s3"># Add these if they are not listed in _com_interfaces_.</span>
+        <span class="s1">interfaces = tuple(self._com_interfaces_)</span>
+        <span class="s0">if </span><span class="s1">ISupportErrorInfo </span><span class="s0">not in </span><span class="s1">interfaces:</span>
+            <span class="s1">interfaces += (ISupportErrorInfo</span><span class="s0">,</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">&quot;_reg_typelib_&quot;</span><span class="s1">):</span>
+            <span class="s0">from </span><span class="s1">comtypes.typeinfo </span><span class="s0">import </span><span class="s1">LoadRegTypeLib</span>
+            <span class="s1">self._COMObject__typelib = LoadRegTypeLib(*self._reg_typelib_)</span>
+            <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">&quot;_reg_clsid_&quot;</span><span class="s1">):</span>
+                <span class="s0">if </span><span class="s1">IProvideClassInfo </span><span class="s0">not in </span><span class="s1">interfaces:</span>
+                    <span class="s1">interfaces += (IProvideClassInfo</span><span class="s0">,</span><span class="s1">)</span>
+                <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">&quot;_outgoing_interfaces_&quot;</span><span class="s1">) </span><span class="s0">and </span><span class="s1">\</span>
+                   <span class="s1">IProvideClassInfo2 </span><span class="s0">not in </span><span class="s1">interfaces:</span>
+                    <span class="s1">interfaces += (IProvideClassInfo2</span><span class="s0">,</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s5">&quot;_reg_clsid_&quot;</span><span class="s1">):</span>
+            <span class="s0">if </span><span class="s1">IPersist </span><span class="s0">not in </span><span class="s1">interfaces:</span>
+                <span class="s1">interfaces += (IPersist</span><span class="s0">,</span><span class="s1">)</span>
+        <span class="s0">for </span><span class="s1">itf </span><span class="s0">in </span><span class="s1">interfaces[::-</span><span class="s2">1</span><span class="s1">]:</span>
+            <span class="s1">self.__make_interface_pointer(itf)</span>
+
+    <span class="s0">def </span><span class="s1">__make_interface_pointer(self</span><span class="s0">, </span><span class="s1">itf):</span>
+        <span class="s1">methods = []  </span><span class="s3"># method implementations</span>
+        <span class="s1">fields = []  </span><span class="s3"># (name, prototype) for virtual function table</span>
+        <span class="s1">iids = []  </span><span class="s3"># interface identifiers.</span>
+        <span class="s3"># iterate over interface inheritance in reverse order to build the</span>
+        <span class="s3"># virtual function table, and leave out the 'object' base class.</span>
+        <span class="s1">finder = self._get_method_finder_(itf)</span>
+        <span class="s0">for </span><span class="s1">interface </span><span class="s0">in </span><span class="s1">itf.__mro__[-</span><span class="s2">2</span><span class="s1">::-</span><span class="s2">1</span><span class="s1">]:</span>
+            <span class="s1">iids.append(interface._iid_)</span>
+            <span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">interface._methods_:</span>
+                <span class="s1">restype</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">argtypes</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags</span><span class="s0">, </span><span class="s1">helptext = m</span>
+                <span class="s1">proto = WINFUNCTYPE(restype</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s1">*argtypes)</span>
+                <span class="s1">fields.append((mthname</span><span class="s0">, </span><span class="s1">proto))</span>
+                <span class="s1">mth = finder.get_impl(interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags)</span>
+                <span class="s1">methods.append(proto(mth))</span>
+        <span class="s1">Vtbl = _create_vtbl_type(tuple(fields)</span><span class="s0">, </span><span class="s1">itf)</span>
+        <span class="s1">vtbl = Vtbl(*methods)</span>
+        <span class="s0">for </span><span class="s1">iid </span><span class="s0">in </span><span class="s1">iids:</span>
+            <span class="s1">self._com_pointers_[iid] = pointer(pointer(vtbl))</span>
+        <span class="s0">if </span><span class="s1">hasattr(itf</span><span class="s0">, </span><span class="s5">&quot;_disp_methods_&quot;</span><span class="s1">):</span>
+            <span class="s1">self._dispimpl_ = {}</span>
+            <span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">itf._disp_methods_:</span>
+                <span class="s1">what</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">idlflags</span><span class="s0">, </span><span class="s1">restype</span><span class="s0">, </span><span class="s1">argspec = m</span>
+                <span class="s3">#################</span>
+                <span class="s3"># What we have:</span>
+                <span class="s3">#</span>
+                <span class="s3"># restypes is a ctypes type or None</span>
+                <span class="s3"># argspec is seq. of (['in'], paramtype, paramname) tuples (or</span>
+                <span class="s3"># lists?)</span>
+                <span class="s3">#################</span>
+                <span class="s3"># What we need:</span>
+                <span class="s3">#</span>
+                <span class="s3"># idlflags must contain 'propget', 'propset' and so on:</span>
+                <span class="s3"># Must be constructed by converting disptype</span>
+                <span class="s3">#</span>
+                <span class="s3"># paramflags must be a sequence</span>
+                <span class="s3"># of (F_IN|F_OUT|F_RETVAL, paramname[, default-value]) tuples</span>
+                <span class="s3">#</span>
+                <span class="s3"># comtypes has this function which helps:</span>
+                <span class="s3">#    def _encode_idl(names):</span>
+                <span class="s3">#        # convert to F_xxx and sum up &quot;in&quot;, &quot;out&quot;,</span>
+                <span class="s3">#        # &quot;retval&quot; values found in _PARAMFLAGS, ignoring</span>
+                <span class="s3">#        # other stuff.</span>
+                <span class="s3">#        return sum([_PARAMFLAGS.get(n, 0) for n in names])</span>
+                <span class="s3">#################</span>
+
+                <span class="s0">if </span><span class="s1">what == </span><span class="s5">&quot;DISPMETHOD&quot;</span><span class="s1">:</span>
+                    <span class="s0">if </span><span class="s5">'propget' </span><span class="s0">in </span><span class="s1">idlflags:</span>
+                        <span class="s1">invkind = </span><span class="s2">2  </span><span class="s3"># DISPATCH_PROPERTYGET</span>
+                        <span class="s1">mthname = </span><span class="s5">&quot;_get_&quot; </span><span class="s1">+ mthname</span>
+                    <span class="s0">elif </span><span class="s5">'propput' </span><span class="s0">in </span><span class="s1">idlflags:</span>
+                        <span class="s1">invkind = </span><span class="s2">4  </span><span class="s3"># DISPATCH_PROPERTYPUT</span>
+                        <span class="s1">mthname = </span><span class="s5">&quot;_set_&quot; </span><span class="s1">+ mthname</span>
+                    <span class="s0">elif </span><span class="s5">'propputref' </span><span class="s0">in </span><span class="s1">idlflags:</span>
+                        <span class="s1">invkind = </span><span class="s2">8  </span><span class="s3"># DISPATCH_PROPERTYPUTREF</span>
+                        <span class="s1">mthname = </span><span class="s5">&quot;_setref_&quot; </span><span class="s1">+ mthname</span>
+                    <span class="s0">else</span><span class="s1">:</span>
+                        <span class="s1">invkind = </span><span class="s2">1  </span><span class="s3"># DISPATCH_METHOD</span>
+                        <span class="s0">if </span><span class="s1">restype:</span>
+                            <span class="s1">argspec = argspec + (([</span><span class="s5">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">restype</span><span class="s0">, </span><span class="s5">&quot;&quot;</span><span class="s1">)</span><span class="s0">,</span><span class="s1">)</span>
+                    <span class="s1">self.__make_dispentry(finder</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">,</span>
+                                          <span class="s1">idlflags</span><span class="s0">, </span><span class="s1">argspec</span><span class="s0">, </span><span class="s1">invkind)</span>
+                <span class="s0">elif </span><span class="s1">what == </span><span class="s5">&quot;DISPPROPERTY&quot;</span><span class="s1">:</span>
+                    <span class="s3"># DISPPROPERTY have implicit &quot;out&quot;</span>
+                    <span class="s0">if </span><span class="s1">restype:</span>
+                        <span class="s1">argspec += (([</span><span class="s5">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">restype</span><span class="s0">, </span><span class="s5">&quot;&quot;</span><span class="s1">)</span><span class="s0">,</span><span class="s1">)</span>
+                    <span class="s1">self.__make_dispentry(finder</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">,</span>
+                                          <span class="s5">&quot;_get_&quot; </span><span class="s1">+ mthname</span><span class="s0">,</span>
+                                          <span class="s1">idlflags</span><span class="s0">, </span><span class="s1">argspec</span><span class="s0">,</span>
+                                          <span class="s2">2  </span><span class="s3"># DISPATCH_PROPERTYGET</span>
+                                          <span class="s1">)</span>
+                    <span class="s0">if not </span><span class="s5">'readonly' </span><span class="s0">in </span><span class="s1">idlflags:</span>
+                        <span class="s1">self.__make_dispentry(finder</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">,</span>
+                                              <span class="s5">&quot;_set_&quot; </span><span class="s1">+ mthname</span><span class="s0">,</span>
+                                              <span class="s1">idlflags</span><span class="s0">, </span><span class="s1">argspec</span><span class="s0">,</span>
+                                              <span class="s2">4</span><span class="s1">)  </span><span class="s3"># DISPATCH_PROPERTYPUT</span>
+                        <span class="s3"># Add DISPATCH_PROPERTYPUTREF also?</span>
+
+    <span class="s0">def </span><span class="s1">__make_dispentry(self</span><span class="s0">,</span>
+                         <span class="s1">finder</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">,</span>
+                         <span class="s1">idlflags</span><span class="s0">, </span><span class="s1">argspec</span><span class="s0">, </span><span class="s1">invkind):</span>
+        <span class="s3"># We build a _dispmap_ entry now that maps invkind and</span>
+        <span class="s3"># dispid to implementations that the finder finds;</span>
+        <span class="s3"># IDispatch_Invoke will later call it.</span>
+        <span class="s1">paramflags = [((_encode_idl(x[</span><span class="s2">0</span><span class="s1">])</span><span class="s0">, </span><span class="s1">x[</span><span class="s2">1</span><span class="s1">]) + tuple(x[</span><span class="s2">3</span><span class="s1">:]))</span>
+                      <span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">argspec]</span>
+        <span class="s3"># XXX can the dispid be at a different index?  Check codegenerator.</span>
+        <span class="s1">dispid = idlflags[</span><span class="s2">0</span><span class="s1">]</span>
+        <span class="s1">impl = finder.get_impl(interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags)</span>
+        <span class="s1">self._dispimpl_[(dispid</span><span class="s0">, </span><span class="s1">invkind)] = impl</span>
+        <span class="s3"># invkind is really a set of flags; we allow both</span>
+        <span class="s3"># DISPATCH_METHOD and DISPATCH_PROPERTYGET (win32com uses</span>
+        <span class="s3"># this, maybe other languages too?)</span>
+        <span class="s0">if </span><span class="s1">invkind </span><span class="s0">in </span><span class="s1">(</span><span class="s2">1</span><span class="s0">, </span><span class="s2">2</span><span class="s1">):</span>
+            <span class="s1">self._dispimpl_[(dispid</span><span class="s0">, </span><span class="s2">3</span><span class="s1">)] = impl</span>
+
+    <span class="s0">def </span><span class="s1">_get_method_finder_(self</span><span class="s0">, </span><span class="s1">itf):</span>
+        <span class="s3"># This method can be overridden to customize how methods are</span>
+        <span class="s3"># found.</span>
+        <span class="s0">return </span><span class="s1">_MethodFinder(self)</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># LocalServer / InprocServer stuff</span>
+    <span class="s1">__server__ = </span><span class="s0">None</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">__run_inprocserver__():</span>
+        <span class="s0">if </span><span class="s1">COMObject.__server__ </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">COMObject.__server__ = InprocServer()</span>
+        <span class="s0">elif </span><span class="s1">isinstance(COMObject.__server__</span><span class="s0">, </span><span class="s1">InprocServer):</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError(</span><span class="s5">&quot;Wrong server type&quot;</span><span class="s1">)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">__run_localserver__(classobjects):</span>
+        <span class="s0">assert </span><span class="s1">COMObject.__server__ </span><span class="s0">is None</span>
+        <span class="s3"># XXX Decide whether we are in STA or MTA</span>
+        <span class="s1">server = COMObject.__server__ = LocalServer()</span>
+        <span class="s1">server.run(classobjects)</span>
+        <span class="s1">COMObject.__server__ = </span><span class="s0">None</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">__keep__(obj):</span>
+        <span class="s1">COMObject._instances_[obj] = </span><span class="s0">None</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;%d active COM objects: Added   %r&quot;</span><span class="s0">, </span><span class="s1">len(COMObject._instances_)</span><span class="s0">,</span>
+               <span class="s1">obj)</span>
+        <span class="s0">if </span><span class="s1">COMObject.__server__:</span>
+            <span class="s1">COMObject.__server__.Lock()</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">__unkeep__(obj):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">del </span><span class="s1">COMObject._instances_[obj]</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s1">_debug(</span><span class="s5">&quot;? active COM objects: Removed %r&quot;</span><span class="s0">, </span><span class="s1">obj)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">_debug(</span><span class="s5">&quot;%d active COM objects: Removed %r&quot;</span><span class="s0">,</span>
+                   <span class="s1">len(COMObject._instances_)</span><span class="s0">, </span><span class="s1">obj)</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;Remaining: %s&quot;</span><span class="s0">, </span><span class="s1">list(COMObject._instances_.keys()))</span>
+        <span class="s0">if </span><span class="s1">COMObject.__server__:</span>
+            <span class="s1">COMObject.__server__.Unlock()</span>
+    <span class="s3">#</span>
+    <span class="s3">################################################################</span>
+
+    <span class="s3">#########################################################</span>
+    <span class="s3"># IUnknown methods implementations</span>
+    <span class="s0">def </span><span class="s1">IUnknown_AddRef(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">,</span>
+                        <span class="s1">__InterlockedIncrement=_InterlockedIncrement</span><span class="s0">,</span>
+                        <span class="s1">_debug=_debug):</span>
+        <span class="s1">result = __InterlockedIncrement(self._refcnt)</span>
+        <span class="s0">if </span><span class="s1">result == </span><span class="s2">1</span><span class="s1">:</span>
+            <span class="s1">self.__keep__(self)</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;%r.AddRef() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">result)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">_final_release_(self):</span>
+        <span class="s4">&quot;&quot;&quot;This method may be overridden in subclasses 
+        to free allocated resources or so.&quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">IUnknown_Release(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">,</span>
+                         <span class="s1">__InterlockedDecrement=_InterlockedDecrement</span><span class="s0">,</span>
+                         <span class="s1">_debug=_debug):</span>
+        <span class="s3"># If this is called at COM shutdown, _InterlockedDecrement()</span>
+        <span class="s3"># must still be available, although module level variables may</span>
+        <span class="s3"># have been deleted already - so we supply it as default</span>
+        <span class="s3"># argument.</span>
+        <span class="s1">result = __InterlockedDecrement(self._refcnt)</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;%r.Release() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">result)</span>
+        <span class="s0">if </span><span class="s1">result == </span><span class="s2">0</span><span class="s1">:</span>
+            <span class="s1">self._final_release_()</span>
+            <span class="s1">self.__unkeep__(self)</span>
+            <span class="s3"># Hm, why isn't this cleaned up by the cycle gc?</span>
+            <span class="s1">self._com_pointers_ = {}</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">IUnknown_QueryInterface(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppvObj</span><span class="s0">, </span><span class="s1">_debug=_debug):</span>
+        <span class="s3"># XXX This is probably too slow.</span>
+        <span class="s3"># riid[0].hashcode() alone takes 33 us!</span>
+        <span class="s1">iid = riid[</span><span class="s2">0</span><span class="s1">]</span>
+        <span class="s1">ptr = self._com_pointers_.get(iid</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">ptr </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s3"># CopyComPointer(src, dst) calls AddRef!</span>
+            <span class="s1">_debug(</span><span class="s5">&quot;%r.QueryInterface(%s) -&gt; S_OK&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">iid)</span>
+            <span class="s0">return </span><span class="s1">CopyComPointer(ptr</span><span class="s0">, </span><span class="s1">ppvObj)</span>
+        <span class="s1">_debug(</span><span class="s5">&quot;%r.QueryInterface(%s) -&gt; E_NOINTERFACE&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">iid)</span>
+        <span class="s0">return </span><span class="s1">E_NOINTERFACE</span>
+
+    <span class="s0">def </span><span class="s1">QueryInterface(self</span><span class="s0">, </span><span class="s1">interface):</span>
+        <span class="s4">&quot;Query the object for an interface pointer&quot;</span>
+        <span class="s3"># This method is NOT the implementation of</span>
+        <span class="s3"># IUnknown::QueryInterface, instead it is supposed to be</span>
+        <span class="s3"># called on an COMObject by user code.  It allows to get COM</span>
+        <span class="s3"># interface pointers from COMObject instances.</span>
+        <span class="s1">ptr = self._com_pointers_.get(interface._iid_</span><span class="s0">, None</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">ptr </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">COMError(E_NOINTERFACE</span><span class="s0">, </span><span class="s1">FormatError(E_NOINTERFACE)</span><span class="s0">,</span>
+                           <span class="s1">(</span><span class="s0">None, None, </span><span class="s2">0</span><span class="s0">, None, None</span><span class="s1">))</span>
+        <span class="s3"># CopyComPointer(src, dst) calls AddRef!</span>
+        <span class="s1">result = POINTER(interface)()</span>
+        <span class="s1">CopyComPointer(ptr</span><span class="s0">, </span><span class="s1">byref(result))</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># ISupportErrorInfo::InterfaceSupportsErrorInfo implementation</span>
+    <span class="s0">def </span><span class="s1">ISupportErrorInfo_InterfaceSupportsErrorInfo(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">riid):</span>
+        <span class="s0">if </span><span class="s1">riid[</span><span class="s2">0</span><span class="s1">] </span><span class="s0">in </span><span class="s1">self._com_pointers_:</span>
+            <span class="s0">return </span><span class="s1">S_OK</span>
+        <span class="s0">return </span><span class="s1">S_FALSE</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># IProvideClassInfo::GetClassInfo implementation</span>
+    <span class="s0">def </span><span class="s1">IProvideClassInfo_GetClassInfo(self):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self.__typelib</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">raise </span><span class="s1">WindowsError(E_NOTIMPL)</span>
+        <span class="s0">return </span><span class="s1">self.__typelib.GetTypeInfoOfGuid(self._reg_clsid_)</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># IProvideClassInfo2::GetGUID implementation</span>
+
+    <span class="s0">def </span><span class="s1">IProvideClassInfo2_GetGUID(self</span><span class="s0">, </span><span class="s1">dwGuidKind):</span>
+        <span class="s3"># GUIDKIND_DEFAULT_SOURCE_DISP_IID = 1</span>
+        <span class="s0">if </span><span class="s1">dwGuidKind != </span><span class="s2">1</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">WindowsError(E_INVALIDARG)</span>
+        <span class="s0">return </span><span class="s1">self._outgoing_interfaces_[</span><span class="s2">0</span><span class="s1">]._iid_</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># IDispatch methods</span>
+    <span class="s1">@property</span>
+    <span class="s0">def </span><span class="s1">__typeinfo(self):</span>
+        <span class="s3"># XXX Looks like this better be a static property, set by the</span>
+        <span class="s3"># code that sets __typelib also...</span>
+        <span class="s1">iid = self._com_interfaces_[</span><span class="s2">0</span><span class="s1">]._iid_</span>
+        <span class="s0">return </span><span class="s1">self.__typelib.GetTypeInfoOfGuid(iid)</span>
+
+    <span class="s0">def </span><span class="s1">IDispatch_GetTypeInfoCount(self):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self.__typelib</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">return </span><span class="s2">0</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s2">1</span>
+
+    <span class="s0">def </span><span class="s1">IDispatch_GetTypeInfo(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">itinfo</span><span class="s0">, </span><span class="s1">lcid</span><span class="s0">, </span><span class="s1">ptinfo):</span>
+        <span class="s0">if </span><span class="s1">itinfo != </span><span class="s2">0</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">DISP_E_BADINDEX</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">ptinfo[</span><span class="s2">0</span><span class="s1">] = self.__typeinfo</span>
+            <span class="s0">return </span><span class="s1">S_OK</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+
+    <span class="s0">def </span><span class="s1">IDispatch_GetIDsOfNames(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">rgszNames</span><span class="s0">, </span><span class="s1">cNames</span><span class="s0">, </span><span class="s1">lcid</span><span class="s0">,</span>
+                                <span class="s1">rgDispId):</span>
+        <span class="s3"># This call uses windll instead of oledll so that a failed</span>
+        <span class="s3"># call to DispGetIDsOfNames will return a HRESULT instead of</span>
+        <span class="s3"># raising an error.</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">tinfo = self.__typeinfo</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+        <span class="s0">return </span><span class="s1">windll.oleaut32.DispGetIDsOfNames(tinfo</span><span class="s0">,</span>
+                                                 <span class="s1">rgszNames</span><span class="s0">, </span><span class="s1">cNames</span><span class="s0">, </span><span class="s1">rgDispId)</span>
+
+    <span class="s0">def </span><span class="s1">IDispatch_Invoke(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">dispIdMember</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">lcid</span><span class="s0">, </span><span class="s1">wFlags</span><span class="s0">,</span>
+                         <span class="s1">pDispParams</span><span class="s0">, </span><span class="s1">pVarResult</span><span class="s0">, </span><span class="s1">pExcepInfo</span><span class="s0">, </span><span class="s1">puArgErr):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">self._dispimpl_</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">tinfo = self.__typeinfo</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s3"># Hm, we pretend to implement IDispatch, but have no</span>
+                <span class="s3"># typeinfo, and so cannot fulfill the contract.  Should we</span>
+                <span class="s3"># better return E_NOTIMPL or DISP_E_MEMBERNOTFOUND?  Some</span>
+                <span class="s3"># clients call IDispatch_Invoke with 'known' DISPID_...'</span>
+                <span class="s3"># values, without going through GetIDsOfNames first.</span>
+                <span class="s0">return </span><span class="s1">DISP_E_MEMBERNOTFOUND</span>
+            <span class="s3"># This call uses windll instead of oledll so that a failed</span>
+            <span class="s3"># call to DispInvoke will return a HRESULT instead of raising</span>
+            <span class="s3"># an error.</span>
+            <span class="s1">interface = self._com_interfaces_[</span><span class="s2">0</span><span class="s1">]</span>
+            <span class="s1">ptr = self._com_pointers_[interface._iid_]</span>
+            <span class="s0">return </span><span class="s1">windll.oleaut32.DispInvoke(</span>
+                <span class="s1">ptr</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">dispIdMember</span><span class="s0">, </span><span class="s1">wFlags</span><span class="s0">, </span><span class="s1">pDispParams</span><span class="s0">, </span><span class="s1">pVarResult</span><span class="s0">,</span>
+                <span class="s1">pExcepInfo</span><span class="s0">, </span><span class="s1">puArgErr</span>
+            <span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s3"># XXX Hm, wFlags should be considered a SET of flags...</span>
+            <span class="s1">mth = self._dispimpl_[(dispIdMember</span><span class="s0">, </span><span class="s1">wFlags)]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">return </span><span class="s1">DISP_E_MEMBERNOTFOUND</span>
+
+        <span class="s3"># Unpack the parameters: It would be great if we could use the</span>
+        <span class="s3"># DispGetParam function - but we cannot since it requires that</span>
+        <span class="s3"># we pass a VARTYPE for each argument and we do not know that.</span>
+        <span class="s3">#</span>
+        <span class="s3"># Seems that n arguments have dispids (0, 1, ..., n-1).</span>
+        <span class="s3"># Unnamed arguments are packed into the DISPPARAMS array in</span>
+        <span class="s3"># reverse order (starting with the highest dispid), named</span>
+        <span class="s3"># arguments are packed in the order specified by the</span>
+        <span class="s3"># rgdispidNamedArgs array.</span>
+        <span class="s3">#</span>
+        <span class="s1">params = pDispParams[</span><span class="s2">0</span><span class="s1">]</span>
+
+        <span class="s0">if </span><span class="s1">wFlags &amp; (</span><span class="s2">4 </span><span class="s1">| </span><span class="s2">8</span><span class="s1">):</span>
+            <span class="s3"># DISPATCH_PROPERTYPUT</span>
+            <span class="s3"># DISPATCH_PROPERTYPUTREF</span>
+            <span class="s3">#</span>
+            <span class="s3"># How are the parameters unpacked for propertyput</span>
+            <span class="s3"># operations with additional parameters?  Can propput</span>
+            <span class="s3"># have additional args?</span>
+            <span class="s1">args = [params.rgvarg[i].value</span>
+                    <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">reversed(list(range(params.cNamedArgs)))]</span>
+            <span class="s3"># MSDN: pVarResult is ignored if DISPATCH_PROPERTYPUT or</span>
+            <span class="s3"># DISPATCH_PROPERTYPUTREF is specified.</span>
+            <span class="s0">return </span><span class="s1">mth(this</span><span class="s0">, </span><span class="s1">*args)</span>
+
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s3"># DISPATCH_METHOD</span>
+            <span class="s3"># DISPATCH_PROPERTYGET</span>
+            <span class="s3"># the positions of named arguments</span>
+            <span class="s3">#</span>
+            <span class="s3"># 2to3 has problems to translate 'range(...)[::-1]'</span>
+            <span class="s3"># correctly, so use 'list(range)[::-1]' instead (will be</span>
+            <span class="s3"># fixed in Python 3.1, probably):</span>
+            <span class="s1">named_indexes = [params.rgdispidNamedArgs[i]</span>
+                             <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(params.cNamedArgs)]</span>
+            <span class="s3"># the positions of unnamed arguments</span>
+            <span class="s1">num_unnamed = params.cArgs - params.cNamedArgs</span>
+            <span class="s1">unnamed_indexes = list(reversed(list(range(num_unnamed))))</span>
+            <span class="s3"># It seems that this code calculates the indexes of the</span>
+            <span class="s3"># parameters in the params.rgvarg array correctly.</span>
+            <span class="s1">indexes = named_indexes + unnamed_indexes</span>
+            <span class="s1">args = [params.rgvarg[i].value </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">indexes]</span>
+
+            <span class="s0">if </span><span class="s1">pVarResult </span><span class="s0">and </span><span class="s1">getattr(mth</span><span class="s0">, </span><span class="s5">&quot;has_outargs&quot;</span><span class="s0">, False</span><span class="s1">):</span>
+                <span class="s1">args.append(pVarResult)</span>
+            <span class="s0">return </span><span class="s1">mth(this</span><span class="s0">, </span><span class="s1">*args)</span>
+
+    <span class="s3">################################################################</span>
+    <span class="s3"># IPersist interface</span>
+    <span class="s0">def </span><span class="s1">IPersist_GetClassID(self):</span>
+        <span class="s0">return </span><span class="s1">self._reg_clsid_</span>
+
+<span class="s1">__all__ = [</span><span class="s5">&quot;COMObject&quot;</span><span class="s1">]</span>
+</pre>
+</body>
+</html>

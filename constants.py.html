@@ -1,0 +1,75 @@
+<html>
+<head>
+<title>constants.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+constants.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">enum </span><span class="s0">import </span><span class="s1">Enum</span><span class="s0">, </span><span class="s1">IntEnum</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">GUID</span>
+
+<span class="s1">IID_Empty = GUID(</span>
+    <span class="s2">'{00000000-0000-0000-0000-000000000000}'</span><span class="s1">)</span>
+
+<span class="s1">CLSID_MMDeviceEnumerator = GUID(</span>
+    <span class="s2">'{BCDE0395-E52F-467C-8E3D-C4579291692E}'</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">ERole(Enum):</span>
+    <span class="s1">eConsole = </span><span class="s3">0</span>
+    <span class="s1">eMultimedia = </span><span class="s3">1</span>
+    <span class="s1">eCommunications = </span><span class="s3">2</span>
+    <span class="s1">ERole_enum_count = </span><span class="s3">3</span>
+
+
+<span class="s0">class </span><span class="s1">EDataFlow(Enum):</span>
+    <span class="s1">eRender = </span><span class="s3">0</span>
+    <span class="s1">eCapture = </span><span class="s3">1</span>
+    <span class="s1">eAll = </span><span class="s3">2</span>
+    <span class="s1">EDataFlow_enum_count = </span><span class="s3">3</span>
+
+
+<span class="s0">class </span><span class="s1">DEVICE_STATE(Enum):</span>
+    <span class="s1">ACTIVE = </span><span class="s3">0x00000001</span>
+    <span class="s1">DISABLED = </span><span class="s3">0x00000002</span>
+    <span class="s1">NOTPRESENT = </span><span class="s3">0x00000004</span>
+    <span class="s1">UNPLUGGED = </span><span class="s3">0x00000008</span>
+    <span class="s1">MASK_ALL = </span><span class="s3">0x0000000F</span>
+
+
+<span class="s0">class </span><span class="s1">AudioDeviceState(Enum):</span>
+    <span class="s1">Active = </span><span class="s3">0x1</span>
+    <span class="s1">Disabled = </span><span class="s3">0x2</span>
+    <span class="s1">NotPresent = </span><span class="s3">0x4</span>
+    <span class="s1">Unplugged = </span><span class="s3">0x8</span>
+
+
+<span class="s0">class </span><span class="s1">STGM(Enum):</span>
+    <span class="s1">STGM_READ = </span><span class="s3">0x00000000</span>
+
+
+<span class="s0">class </span><span class="s1">AUDCLNT_SHAREMODE(Enum):</span>
+    <span class="s1">AUDCLNT_SHAREMODE_SHARED = </span><span class="s3">0x00000001</span>
+    <span class="s1">AUDCLNT_SHAREMODE_EXCLUSIVE = </span><span class="s3">0x00000002</span>
+
+
+<span class="s0">class </span><span class="s1">AudioSessionState(IntEnum):</span>
+    <span class="s4"># IntEnum to make instances comparable.</span>
+    <span class="s1">Inactive = </span><span class="s3">0</span>
+    <span class="s1">Active = </span><span class="s3">1</span>
+    <span class="s1">Expired = </span><span class="s3">2</span>
+</pre>
+</body>
+</html>

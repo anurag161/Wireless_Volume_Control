@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>test_dict.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_dict.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Use Scripting.Dictionary to test the lazybind module.&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">unittest</span>
+
+<span class="s2">from </span><span class="s1">comtypes.automation </span><span class="s2">import </span><span class="s1">VARIANT</span>
+<span class="s2">from </span><span class="s1">comtypes.client </span><span class="s2">import </span><span class="s1">CreateObject</span>
+<span class="s2">from </span><span class="s1">comtypes.client.lazybind </span><span class="s2">import </span><span class="s1">Dispatch</span>
+
+
+<span class="s2">def </span><span class="s1">setUpModule():</span>
+    <span class="s2">raise </span><span class="s1">unittest.SkipTest(</span><span class="s3">&quot;Depends on `comtypes.safearray` which depends on numpy which isn't &quot;</span>
+                            <span class="s3">&quot;listed in project dependencies.&quot;</span><span class="s1">)</span>
+
+<span class="s2">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s2">def </span><span class="s1">test_dict(self):</span>
+        <span class="s1">d = CreateObject(</span><span class="s3">&quot;Scripting.Dictionary&quot;</span><span class="s2">, </span><span class="s1">dynamic=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(type(d)</span><span class="s2">, </span><span class="s1">Dispatch)</span>
+
+        <span class="s4"># Count is a normal propget, no propput</span>
+        <span class="s1">self.assertEqual(d.Count</span><span class="s2">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(AttributeError</span><span class="s2">, lambda</span><span class="s1">: setattr(d</span><span class="s2">, </span><span class="s3">&quot;Count&quot;</span><span class="s2">, </span><span class="s1">-</span><span class="s5">1</span><span class="s1">))</span>
+
+        <span class="s4"># HashVal is a 'named' propget, no propput</span>
+        <span class="s4">##d.HashVal</span>
+
+        <span class="s4"># Add(Key, Item) -&gt; None</span>
+        <span class="s1">self.assertEqual(d.Add(</span><span class="s3">&quot;one&quot;</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span><span class="s2">, None</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Count</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+
+        <span class="s4"># RemoveAll() -&gt; None</span>
+        <span class="s1">self.assertEqual(d.RemoveAll()</span><span class="s2">, None</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Count</span><span class="s2">, </span><span class="s5">0</span><span class="s1">)</span>
+
+        <span class="s4"># CompareMode: propget, propput</span>
+        <span class="s4"># (Can only be set when dict is empty!)</span>
+        <span class="s1">self.assertEqual(d.CompareMode</span><span class="s2">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">d.CompareMode = </span><span class="s5">1</span>
+        <span class="s1">self.assertEqual(d.CompareMode</span><span class="s2">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">d.CompareMode = </span><span class="s5">0</span>
+
+        <span class="s4"># Exists(key) -&gt; bool</span>
+        <span class="s1">self.assertEqual(d.Exists(</span><span class="s5">42</span><span class="s1">)</span><span class="s2">, False</span><span class="s1">)</span>
+        <span class="s1">d.Add(</span><span class="s5">42</span><span class="s2">, </span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Exists(</span><span class="s5">42</span><span class="s1">)</span><span class="s2">, True</span><span class="s1">)</span>
+
+        <span class="s4"># Keys() -&gt; array</span>
+        <span class="s4"># Items() -&gt; array</span>
+        <span class="s1">self.assertEqual(d.Keys()</span><span class="s2">, </span><span class="s1">(</span><span class="s5">42</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s1">self.assertEqual(d.Items()</span><span class="s2">, </span><span class="s1">(</span><span class="s3">&quot;foo&quot;</span><span class="s2">,</span><span class="s1">))</span>
+        <span class="s1">d.Remove(</span><span class="s5">42</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Exists(</span><span class="s5">42</span><span class="s1">)</span><span class="s2">, False</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Keys()</span><span class="s2">, </span><span class="s1">())</span>
+        <span class="s1">self.assertEqual(d.Items()</span><span class="s2">, </span><span class="s1">())</span>
+
+        <span class="s4"># Item[key] : propget</span>
+        <span class="s1">d.Add(</span><span class="s5">42</span><span class="s2">, </span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s5">42</span><span class="s1">]</span><span class="s2">, </span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span>
+
+        <span class="s1">d.Add(</span><span class="s3">&quot;spam&quot;</span><span class="s2">, </span><span class="s3">&quot;bar&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;spam&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s3">&quot;bar&quot;</span><span class="s1">)</span>
+
+        <span class="s4"># Item[key] = value: propput, propputref</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;key&quot;</span><span class="s1">] = </span><span class="s3">&quot;value&quot;</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;key&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s3">&quot;value&quot;</span><span class="s1">)</span>
+        <span class="s1">d.Item[</span><span class="s5">42</span><span class="s1">] = </span><span class="s5">73</span><span class="s2">, </span><span class="s5">48</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s5">42</span><span class="s1">]</span><span class="s2">, </span><span class="s1">(</span><span class="s5">73</span><span class="s2">, </span><span class="s5">48</span><span class="s1">))</span>
+
+        <span class="s4">################################################################</span>
+        <span class="s4"># part 2, testing propput and propputref</span>
+
+        <span class="s1">s = CreateObject(</span><span class="s3">&quot;Scripting.Dictionary&quot;</span><span class="s2">, </span><span class="s1">dynamic=</span><span class="s2">True</span><span class="s1">)</span>
+        <span class="s1">s.CompareMode = </span><span class="s5">42</span>
+
+        <span class="s4"># This calls propputref, since we assign an Object</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">] = s</span>
+        <span class="s4"># This calls propput, since we assing a Value</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;value&quot;</span><span class="s1">] = s.CompareMode</span>
+
+        <span class="s1">a = d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">]</span>
+
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">s)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">].CompareMode</span><span class="s2">, </span><span class="s5">42</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;value&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s5">42</span><span class="s1">)</span>
+
+        <span class="s4"># Changing a property of the object</span>
+        <span class="s1">s.CompareMode = </span><span class="s5">5</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">s)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;object&quot;</span><span class="s1">].CompareMode</span><span class="s2">, </span><span class="s5">5</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;value&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s5">42</span><span class="s1">)</span>
+
+        <span class="s4"># This also calls propputref since we assign an Object</span>
+        <span class="s1">d.Item[</span><span class="s3">&quot;var&quot;</span><span class="s1">] = VARIANT(s)</span>
+        <span class="s1">self.assertEqual(d.Item[</span><span class="s3">&quot;var&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s1">s)</span>
+
+        <span class="s4"># iter(d)</span>
+        <span class="s1">keys = [x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">d]</span>
+        <span class="s1">self.assertEqual(d.Keys()</span><span class="s2">,</span>
+                             <span class="s1">tuple([x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">d]))</span>
+
+        <span class="s4"># d[key] = value</span>
+        <span class="s4"># d[key] -&gt; value</span>
+        <span class="s1">d[</span><span class="s3">&quot;blah&quot;</span><span class="s1">] = </span><span class="s3">&quot;blarg&quot;</span>
+        <span class="s1">self.assertEqual(d[</span><span class="s3">&quot;blah&quot;</span><span class="s1">]</span><span class="s2">, </span><span class="s3">&quot;blarg&quot;</span><span class="s1">)</span>
+        <span class="s4"># d(key) -&gt; value</span>
+        <span class="s1">self.assertEqual(d(</span><span class="s3">&quot;blah&quot;</span><span class="s1">)</span><span class="s2">, </span><span class="s3">&quot;blarg&quot;</span><span class="s1">)</span>
+
+<span class="s2">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

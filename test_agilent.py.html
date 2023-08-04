@@ -1,0 +1,114 @@
+<html>
+<head>
+<title>test_agilent.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_agilent.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># This test requires that the Agilent IVI-COM Driver for Agilent546XX</span>
+<span class="s0"># is installed.  It is not requires to have a physical instrument</span>
+<span class="s0"># connected, the driver is used in simulation mode.</span>
+
+<span class="s2">from </span><span class="s1">__future__ </span><span class="s2">import </span><span class="s1">print_function</span>
+<span class="s2">import </span><span class="s1">unittest</span>
+<span class="s2">from </span><span class="s1">comtypes.test </span><span class="s2">import </span><span class="s1">ResourceDenied</span>
+<span class="s2">from </span><span class="s1">comtypes.client </span><span class="s2">import </span><span class="s1">CreateObject</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">GUID</span>
+<span class="s2">from </span><span class="s1">comtypes.safearray </span><span class="s2">import </span><span class="s1">_midlSAFEARRAY</span>
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">c_double</span><span class="s2">, </span><span class="s1">POINTER</span>
+
+<span class="s2">try</span><span class="s1">:</span>
+    <span class="s1">GUID.from_progid(</span><span class="s3">&quot;Agilent546XX.Agilent546XX&quot;</span><span class="s1">)</span>
+<span class="s2">except </span><span class="s1">WindowsError:</span>
+    <span class="s2">pass</span>
+
+<span class="s2">else</span><span class="s1">:</span>
+    <span class="s2">class </span><span class="s1">Test(unittest.TestCase):</span>
+        <span class="s2">def </span><span class="s1">test(self):</span>
+            <span class="s0"># The point of this test is the ReadWaveform method below,</span>
+            <span class="s0"># which takes several [in, out] arguments.</span>
+            <span class="s1">agDrvr = CreateObject(</span><span class="s3">&quot;Agilent546XX.Agilent546XX&quot;</span><span class="s1">)</span>
+
+            <span class="s0"># XXX XXX XXX The following call crashes hard with an accessviolation when</span>
+            <span class="s0"># the OANOCACHE environ variable is set.</span>
+            <span class="s2">import </span><span class="s1">os</span>
+            <span class="s2">if </span><span class="s3">&quot;OANOCACHE&quot; </span><span class="s2">in </span><span class="s1">os.environ:</span>
+                <span class="s1">print(</span><span class="s3">&quot;Cannot test. buggy COM object?&quot;</span><span class="s1">)</span>
+                <span class="s2">return</span>
+
+            <span class="s0"># Initialize the driver in simulation mode.  Resource descriptor is ignored.</span>
+            <span class="s1">agDrvr.Initialize(</span><span class="s3">&quot;&quot;</span><span class="s2">, False, False, </span><span class="s3">&quot;Simulate=true&quot;</span><span class="s1">)</span>
+            <span class="s0"># Initialize driver.  Edit resource descriptor for your system.</span>
+            <span class="s0"># agDrvr.Initialize(&quot;GPIB0::7::INSTR&quot;, False, False, &quot;QueryInstrStatus=true&quot;)</span>
+
+            <span class="s2">from </span><span class="s1">comtypes.gen </span><span class="s2">import </span><span class="s1">IviScopeLib</span>
+            <span class="s1">iviDrvr = agDrvr.QueryInterface(IviScopeLib.IIviScope)</span>
+
+            <span class="s0"># Get driver Identity properties.  Driver initialization not required.</span>
+<span class="s0">##            print &quot;Identifier:&quot;, iviDrvr.Identity.Identifier</span>
+<span class="s0">##            print &quot;   Revision:&quot;,  agDrvr.Identity.Revision</span>
+<span class="s0">##            print &quot;Description:&quot;, agDrvr.Identity.Description</span>
+
+            <span class="s0"># Get instrument Identity properties.</span>
+<span class="s0">##            print &quot;InstrumentModel: &quot;, agDrvr.Identity.InstrumentModel</span>
+<span class="s0">##            print &quot;   FirmwareRevision: &quot;, agDrvr.Identity.InstrumentFirmwareRevision</span>
+<span class="s0">##            print &quot;   SerialNumber: &quot;, agDrvr.System.SerialNumber</span>
+
+            <span class="s0"># Setup for a measurement.  Reset in this case.</span>
+            <span class="s1">agDrvr.Utility.Reset()</span>
+
+            <span class="s1">pMeasurement = agDrvr.Measurements.Item(</span><span class="s3">&quot;UserChannel1&quot;</span><span class="s1">)</span>
+            <span class="s0"># ReadWaveform() takes a sweep and reads the data.</span>
+            <span class="s0">#</span>
+            <span class="s0"># Definition generated for ReadWaveform():</span>
+            <span class="s0">#COMMETHOD([helpstring(u'Acquires and returns a waveform on the configured channels.')],</span>
+            <span class="s0">#          HRESULT, 'ReadWaveform',</span>
+            <span class="s0">#          ( ['in'], Agilent546XXTimeOutEnum, 'MaxTime' ),</span>
+            <span class="s0">#          ( ['in', 'out'], POINTER(_midlSAFEARRAY(c_double)), 'pWaveformArray' ),</span>
+            <span class="s0">#          ( ['in', 'out'], POINTER(c_double), 'pInitialX' ),</span>
+            <span class="s0">#          ( ['in', 'out'], POINTER(c_double), 'pXIncrement' )),</span>
+
+            <span class="s0"># [in, out] arguments are now optional (comtypes</span>
+            <span class="s0"># constructs an empty default value when nothing is</span>
+            <span class="s0"># passed).</span>
+            <span class="s1">psaWaveform = _midlSAFEARRAY(c_double).create([])</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s1">))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">pInitialX=</span><span class="s4">9.0</span><span class="s1">))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">pXIncrement=</span><span class="s4">9.0</span><span class="s2">, </span><span class="s1">pInitialX=</span><span class="s4">3.0</span><span class="s1">))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s1">))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">[]))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">pWaveformArray = []))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">psaWaveform))</span>
+            <span class="s1">self._check_result(pMeasurement.ReadWaveform(</span><span class="s4">20000</span><span class="s2">, </span><span class="s1">pXIncrement=</span><span class="s4">9.0</span><span class="s1">))</span>
+
+        <span class="s2">def </span><span class="s1">_check_result(self</span><span class="s2">, </span><span class="s1">xxx_todo_changeme):</span>
+            <span class="s0"># ReadWaveform, in simulation mode, returns three values:</span>
+            <span class="s0">#</span>
+            <span class="s0"># - a safearray containing 100 random double values,</span>
+            <span class="s0">#   unpacked and returned as tuple</span>
+            <span class="s0"># - the initial_x value: 0.0</span>
+            <span class="s0"># - the x_increment value: 0.0</span>
+            <span class="s1">(array</span><span class="s2">, </span><span class="s1">initial_x</span><span class="s2">, </span><span class="s1">x_increment) = xxx_todo_changeme</span>
+            <span class="s1">self.assertEqual(len(array)</span><span class="s2">, </span><span class="s4">100</span><span class="s1">)</span>
+            <span class="s1">self.assertFalse([x </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">array </span><span class="s2">if not </span><span class="s1">isinstance(x</span><span class="s2">, </span><span class="s1">float)])</span>
+            <span class="s1">self.assertEqual(initial_x</span><span class="s2">, </span><span class="s4">0.0</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(x_increment</span><span class="s2">, </span><span class="s4">0.0</span><span class="s1">)</span>
+
+
+
+<span class="s2">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

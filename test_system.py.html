@@ -1,0 +1,915 @@
+<html>
+<head>
+<title>test_system.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+.s6 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_system.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;Tests for system APIS.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">contextlib</span>
+<span class="s3">import </span><span class="s1">datetime</span>
+<span class="s3">import </span><span class="s1">errno</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">platform</span>
+<span class="s3">import </span><span class="s1">pprint</span>
+<span class="s3">import </span><span class="s1">shutil</span>
+<span class="s3">import </span><span class="s1">signal</span>
+<span class="s3">import </span><span class="s1">socket</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">import </span><span class="s1">time</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">AIX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">BSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">FREEBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">LINUX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">MACOS</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">NETBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">OPENBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">POSIX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">SUNOS</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">WINDOWS</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">FileNotFoundError</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">long</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">ASCII_FS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">CI_TESTING</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">DEVNULL</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">GITHUB_ACTIONS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">GLOBAL_TIMEOUT</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_BATTERY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_CPU_FREQ</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_GETLOADAVG</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_NET_IO_COUNTERS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_SENSORS_BATTERY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_SENSORS_FANS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_SENSORS_TEMPERATURES</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">IS_64BIT</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">MACOS_12PLUS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PYPY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">UNICODE_SUFFIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">check_net_address</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">enum</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">mock</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry_on_failure</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># --- System-related API tests</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestProcessAPIs(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_process_iter(self):</span>
+        <span class="s1">self.assertIn(os.getpid()</span><span class="s3">, </span><span class="s1">[x.pid </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.process_iter()])</span>
+        <span class="s1">sproc = self.spawn_testproc()</span>
+        <span class="s1">self.assertIn(sproc.pid</span><span class="s3">, </span><span class="s1">[x.pid </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.process_iter()])</span>
+        <span class="s1">p = psutil.Process(sproc.pid)</span>
+        <span class="s1">p.kill()</span>
+        <span class="s1">p.wait()</span>
+        <span class="s1">self.assertNotIn(sproc.pid</span><span class="s3">, </span><span class="s1">[x.pid </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.process_iter()])</span>
+
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.Process'</span><span class="s3">,</span>
+                        <span class="s1">side_effect=psutil.NoSuchProcess(os.getpid())):</span>
+            <span class="s1">self.assertEqual(list(psutil.process_iter())</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.Process'</span><span class="s3">,</span>
+                        <span class="s1">side_effect=psutil.AccessDenied(os.getpid())):</span>
+            <span class="s3">with </span><span class="s1">self.assertRaises(psutil.AccessDenied):</span>
+                <span class="s1">list(psutil.process_iter())</span>
+
+    <span class="s3">def </span><span class="s1">test_prcess_iter_w_attrs(self):</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">psutil.process_iter(attrs=[</span><span class="s4">'pid'</span><span class="s1">]):</span>
+            <span class="s1">self.assertEqual(list(p.info.keys())</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'pid'</span><span class="s1">])</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(ValueError):</span>
+            <span class="s1">list(psutil.process_iter(attrs=[</span><span class="s4">'foo'</span><span class="s1">]))</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.Process.cpu_times&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=psutil.AccessDenied(</span><span class="s5">0</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">psutil.process_iter(attrs=[</span><span class="s4">&quot;pid&quot;</span><span class="s3">, </span><span class="s4">&quot;cpu_times&quot;</span><span class="s1">]):</span>
+                <span class="s1">self.assertIsNone(p.info[</span><span class="s4">'cpu_times'</span><span class="s1">])</span>
+                <span class="s1">self.assertGreaterEqual(p.info[</span><span class="s4">'pid'</span><span class="s1">]</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.Process.cpu_times&quot;</span><span class="s3">,</span>
+                        <span class="s1">side_effect=psutil.AccessDenied(</span><span class="s5">0</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">flag = object()</span>
+            <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">psutil.process_iter(</span>
+                    <span class="s1">attrs=[</span><span class="s4">&quot;pid&quot;</span><span class="s3">, </span><span class="s4">&quot;cpu_times&quot;</span><span class="s1">]</span><span class="s3">, </span><span class="s1">ad_value=flag):</span>
+                <span class="s1">self.assertIs(p.info[</span><span class="s4">'cpu_times'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">flag)</span>
+                <span class="s1">self.assertGreaterEqual(p.info[</span><span class="s4">'pid'</span><span class="s1">]</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and </span><span class="s1">WINDOWS</span><span class="s3">,</span>
+                     <span class="s4">&quot;spawn_testproc() unreliable on PYPY + WINDOWS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_wait_procs(self):</span>
+        <span class="s3">def </span><span class="s1">callback(p):</span>
+            <span class="s1">pids.append(p.pid)</span>
+
+        <span class="s1">pids = []</span>
+        <span class="s1">sproc1 = self.spawn_testproc()</span>
+        <span class="s1">sproc2 = self.spawn_testproc()</span>
+        <span class="s1">sproc3 = self.spawn_testproc()</span>
+        <span class="s1">procs = [psutil.Process(x.pid) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">(sproc1</span><span class="s3">, </span><span class="s1">sproc2</span><span class="s3">, </span><span class="s1">sproc3)]</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">psutil.wait_procs</span><span class="s3">, </span><span class="s1">procs</span><span class="s3">, </span><span class="s1">timeout=-</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(TypeError</span><span class="s3">, </span><span class="s1">psutil.wait_procs</span><span class="s3">, </span><span class="s1">procs</span><span class="s3">, </span><span class="s1">callback=</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">t = time.time()</span>
+        <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = psutil.wait_procs(procs</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s5">0.01</span><span class="s3">, </span><span class="s1">callback=callback)</span>
+
+        <span class="s1">self.assertLess(time.time() - t</span><span class="s3">, </span><span class="s5">0.5</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(gone</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s1">self.assertEqual(len(alive)</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(pids</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">alive:</span>
+            <span class="s1">self.assertFalse(hasattr(p</span><span class="s3">, </span><span class="s4">'returncode'</span><span class="s1">))</span>
+
+        <span class="s1">@retry_on_failure(</span><span class="s5">30</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">test(procs</span><span class="s3">, </span><span class="s1">callback):</span>
+            <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = psutil.wait_procs(procs</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s5">0.03</span><span class="s3">,</span>
+                                            <span class="s1">callback=callback)</span>
+            <span class="s1">self.assertEqual(len(gone)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(alive)</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s3">return </span><span class="s1">gone</span><span class="s3">, </span><span class="s1">alive</span>
+
+        <span class="s1">sproc3.terminate()</span>
+        <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = test(procs</span><span class="s3">, </span><span class="s1">callback)</span>
+        <span class="s1">self.assertIn(sproc3.pid</span><span class="s3">, </span><span class="s1">[x.pid </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">gone])</span>
+        <span class="s3">if </span><span class="s1">POSIX:</span>
+            <span class="s1">self.assertEqual(gone.pop().returncode</span><span class="s3">, </span><span class="s1">-signal.SIGTERM)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertEqual(gone.pop().returncode</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(pids</span><span class="s3">, </span><span class="s1">[sproc3.pid])</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">alive:</span>
+            <span class="s1">self.assertFalse(hasattr(p</span><span class="s3">, </span><span class="s4">'returncode'</span><span class="s1">))</span>
+
+        <span class="s1">@retry_on_failure(</span><span class="s5">30</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">test(procs</span><span class="s3">, </span><span class="s1">callback):</span>
+            <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = psutil.wait_procs(procs</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s5">0.03</span><span class="s3">,</span>
+                                            <span class="s1">callback=callback)</span>
+            <span class="s1">self.assertEqual(len(gone)</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(alive)</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s3">return </span><span class="s1">gone</span><span class="s3">, </span><span class="s1">alive</span>
+
+        <span class="s1">sproc1.terminate()</span>
+        <span class="s1">sproc2.terminate()</span>
+        <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = test(procs</span><span class="s3">, </span><span class="s1">callback)</span>
+        <span class="s1">self.assertEqual(set(pids)</span><span class="s3">, </span><span class="s1">set([sproc1.pid</span><span class="s3">, </span><span class="s1">sproc2.pid</span><span class="s3">, </span><span class="s1">sproc3.pid]))</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">gone:</span>
+            <span class="s1">self.assertTrue(hasattr(p</span><span class="s3">, </span><span class="s4">'returncode'</span><span class="s1">))</span>
+
+    <span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and </span><span class="s1">WINDOWS</span><span class="s3">,</span>
+                     <span class="s4">&quot;spawn_testproc() unreliable on PYPY + WINDOWS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_wait_procs_no_timeout(self):</span>
+        <span class="s1">sproc1 = self.spawn_testproc()</span>
+        <span class="s1">sproc2 = self.spawn_testproc()</span>
+        <span class="s1">sproc3 = self.spawn_testproc()</span>
+        <span class="s1">procs = [psutil.Process(x.pid) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">(sproc1</span><span class="s3">, </span><span class="s1">sproc2</span><span class="s3">, </span><span class="s1">sproc3)]</span>
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">procs:</span>
+            <span class="s1">p.terminate()</span>
+        <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = psutil.wait_procs(procs)</span>
+
+    <span class="s3">def </span><span class="s1">test_pid_exists(self):</span>
+        <span class="s1">sproc = self.spawn_testproc()</span>
+        <span class="s1">self.assertTrue(psutil.pid_exists(sproc.pid))</span>
+        <span class="s1">p = psutil.Process(sproc.pid)</span>
+        <span class="s1">p.kill()</span>
+        <span class="s1">p.wait()</span>
+        <span class="s1">self.assertFalse(psutil.pid_exists(sproc.pid))</span>
+        <span class="s1">self.assertFalse(psutil.pid_exists(-</span><span class="s5">1</span><span class="s1">))</span>
+        <span class="s1">self.assertEqual(psutil.pid_exists(</span><span class="s5">0</span><span class="s1">)</span><span class="s3">, </span><span class="s5">0 </span><span class="s3">in </span><span class="s1">psutil.pids())</span>
+
+    <span class="s3">def </span><span class="s1">test_pid_exists_2(self):</span>
+        <span class="s1">pids = psutil.pids()</span>
+        <span class="s3">for </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">pids:</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s3">assert </span><span class="s1">psutil.pid_exists(pid)</span>
+            <span class="s3">except </span><span class="s1">AssertionError:</span>
+                <span class="s0"># in case the process disappeared in meantime fail only</span>
+                <span class="s0"># if it is no longer in psutil.pids()</span>
+                <span class="s1">time.sleep(</span><span class="s5">.1</span><span class="s1">)</span>
+                <span class="s1">self.assertNotIn(pid</span><span class="s3">, </span><span class="s1">psutil.pids())</span>
+        <span class="s1">pids = range(max(pids) + </span><span class="s5">5000</span><span class="s3">, </span><span class="s1">max(pids) + </span><span class="s5">6000</span><span class="s1">)</span>
+        <span class="s3">for </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">pids:</span>
+            <span class="s1">self.assertFalse(psutil.pid_exists(pid)</span><span class="s3">, </span><span class="s1">msg=pid)</span>
+
+
+<span class="s3">class </span><span class="s1">TestMiscAPIs(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_boot_time(self):</span>
+        <span class="s1">bt = psutil.boot_time()</span>
+        <span class="s1">self.assertIsInstance(bt</span><span class="s3">, </span><span class="s1">float)</span>
+        <span class="s1">self.assertGreater(bt</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.assertLess(bt</span><span class="s3">, </span><span class="s1">time.time())</span>
+
+    <span class="s1">@unittest.skipIf(CI_TESTING </span><span class="s3">and not </span><span class="s1">psutil.users()</span><span class="s3">, </span><span class="s4">&quot;unreliable on CI&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_users(self):</span>
+        <span class="s1">users = psutil.users()</span>
+        <span class="s1">self.assertNotEqual(users</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s3">for </span><span class="s1">user </span><span class="s3">in </span><span class="s1">users:</span>
+            <span class="s3">assert </span><span class="s1">user.name</span><span class="s3">, </span><span class="s1">user</span>
+            <span class="s1">self.assertIsInstance(user.name</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(user.terminal</span><span class="s3">, </span><span class="s1">(str</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+            <span class="s3">if </span><span class="s1">user.host </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">self.assertIsInstance(user.host</span><span class="s3">, </span><span class="s1">(str</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+            <span class="s1">user.terminal</span>
+            <span class="s1">user.host</span>
+            <span class="s3">assert </span><span class="s1">user.started &gt; </span><span class="s5">0.0</span><span class="s3">, </span><span class="s1">user</span>
+            <span class="s1">datetime.datetime.fromtimestamp(user.started)</span>
+            <span class="s3">if </span><span class="s1">WINDOWS </span><span class="s3">or </span><span class="s1">OPENBSD:</span>
+                <span class="s1">self.assertIsNone(user.pid)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">psutil.Process(user.pid)</span>
+
+    <span class="s3">def </span><span class="s1">test_test(self):</span>
+        <span class="s0"># test for psutil.test() function</span>
+        <span class="s1">stdout = sys.stdout</span>
+        <span class="s1">sys.stdout = DEVNULL</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">psutil.test()</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s1">sys.stdout = stdout</span>
+
+    <span class="s3">def </span><span class="s1">test_os_constants(self):</span>
+        <span class="s1">names = [</span><span class="s4">&quot;POSIX&quot;</span><span class="s3">, </span><span class="s4">&quot;WINDOWS&quot;</span><span class="s3">, </span><span class="s4">&quot;LINUX&quot;</span><span class="s3">, </span><span class="s4">&quot;MACOS&quot;</span><span class="s3">, </span><span class="s4">&quot;FREEBSD&quot;</span><span class="s3">, </span><span class="s4">&quot;OPENBSD&quot;</span><span class="s3">,</span>
+                 <span class="s4">&quot;NETBSD&quot;</span><span class="s3">, </span><span class="s4">&quot;BSD&quot;</span><span class="s3">, </span><span class="s4">&quot;SUNOS&quot;</span><span class="s1">]</span>
+        <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">names:</span>
+            <span class="s1">self.assertIsInstance(getattr(psutil</span><span class="s3">, </span><span class="s1">name)</span><span class="s3">, </span><span class="s1">bool</span><span class="s3">, </span><span class="s1">msg=name)</span>
+
+        <span class="s3">if </span><span class="s1">os.name == </span><span class="s4">'posix'</span><span class="s1">:</span>
+            <span class="s3">assert </span><span class="s1">psutil.POSIX</span>
+            <span class="s3">assert not </span><span class="s1">psutil.WINDOWS</span>
+            <span class="s1">names.remove(</span><span class="s4">&quot;POSIX&quot;</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s4">&quot;linux&quot; </span><span class="s3">in </span><span class="s1">sys.platform.lower():</span>
+                <span class="s3">assert </span><span class="s1">psutil.LINUX</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;LINUX&quot;</span><span class="s1">)</span>
+            <span class="s3">elif </span><span class="s4">&quot;bsd&quot; </span><span class="s3">in </span><span class="s1">sys.platform.lower():</span>
+                <span class="s3">assert </span><span class="s1">psutil.BSD</span>
+                <span class="s1">self.assertEqual([psutil.FREEBSD</span><span class="s3">, </span><span class="s1">psutil.OPENBSD</span><span class="s3">,</span>
+                                  <span class="s1">psutil.NETBSD].count(</span><span class="s3">True</span><span class="s1">)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;BSD&quot;</span><span class="s1">)</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;FREEBSD&quot;</span><span class="s1">)</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;OPENBSD&quot;</span><span class="s1">)</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;NETBSD&quot;</span><span class="s1">)</span>
+            <span class="s3">elif </span><span class="s4">&quot;sunos&quot; </span><span class="s3">in </span><span class="s1">sys.platform.lower() </span><span class="s3">or </span><span class="s1">\</span>
+                    <span class="s4">&quot;solaris&quot; </span><span class="s3">in </span><span class="s1">sys.platform.lower():</span>
+                <span class="s3">assert </span><span class="s1">psutil.SUNOS</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;SUNOS&quot;</span><span class="s1">)</span>
+            <span class="s3">elif </span><span class="s4">&quot;darwin&quot; </span><span class="s3">in </span><span class="s1">sys.platform.lower():</span>
+                <span class="s3">assert </span><span class="s1">psutil.MACOS</span>
+                <span class="s1">names.remove(</span><span class="s4">&quot;MACOS&quot;</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">assert </span><span class="s1">psutil.WINDOWS</span>
+            <span class="s3">assert not </span><span class="s1">psutil.POSIX</span>
+            <span class="s1">names.remove(</span><span class="s4">&quot;WINDOWS&quot;</span><span class="s1">)</span>
+
+        <span class="s0"># assert all other constants are set to False</span>
+        <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">names:</span>
+            <span class="s1">self.assertIs(getattr(psutil</span><span class="s3">, </span><span class="s1">name)</span><span class="s3">, False, </span><span class="s1">msg=name)</span>
+
+
+<span class="s3">class </span><span class="s1">TestMemoryAPIs(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_virtual_memory(self):</span>
+        <span class="s1">mem = psutil.virtual_memory()</span>
+        <span class="s3">assert </span><span class="s1">mem.total &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.available &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s5">0 </span><span class="s1">&lt;= mem.percent &lt;= </span><span class="s5">100</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.used &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.free &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">mem._fields:</span>
+            <span class="s1">value = getattr(mem</span><span class="s3">, </span><span class="s1">name)</span>
+            <span class="s3">if </span><span class="s1">name != </span><span class="s4">'percent'</span><span class="s1">:</span>
+                <span class="s1">self.assertIsInstance(value</span><span class="s3">, </span><span class="s1">(int</span><span class="s3">, </span><span class="s1">long))</span>
+            <span class="s3">if </span><span class="s1">name != </span><span class="s4">'total'</span><span class="s1">:</span>
+                <span class="s3">if not </span><span class="s1">value &gt;= </span><span class="s5">0</span><span class="s1">:</span>
+                    <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;%r &lt; 0 (%s)&quot; </span><span class="s1">% (name</span><span class="s3">, </span><span class="s1">value))</span>
+                <span class="s3">if </span><span class="s1">value &gt; mem.total:</span>
+                    <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;%r &gt; total (total=%s, %s=%s)&quot;</span>
+                                    <span class="s1">% (name</span><span class="s3">, </span><span class="s1">mem.total</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">value))</span>
+
+    <span class="s3">def </span><span class="s1">test_swap_memory(self):</span>
+        <span class="s1">mem = psutil.swap_memory()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">mem._fields</span><span class="s3">, </span><span class="s1">(</span><span class="s4">'total'</span><span class="s3">, </span><span class="s4">'used'</span><span class="s3">, </span><span class="s4">'free'</span><span class="s3">, </span><span class="s4">'percent'</span><span class="s3">, </span><span class="s4">'sin'</span><span class="s3">, </span><span class="s4">'sout'</span><span class="s1">))</span>
+
+        <span class="s3">assert </span><span class="s1">mem.total &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.used &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">if </span><span class="s1">mem.total &gt; </span><span class="s5">0</span><span class="s1">:</span>
+            <span class="s0"># likely a system with no swap partition</span>
+            <span class="s3">assert </span><span class="s1">mem.free &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">assert </span><span class="s1">mem.free == </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s5">0 </span><span class="s1">&lt;= mem.percent &lt;= </span><span class="s5">100</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.sin &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+        <span class="s3">assert </span><span class="s1">mem.sout &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">mem</span>
+
+
+<span class="s3">class </span><span class="s1">TestCpuAPIs(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_logical(self):</span>
+        <span class="s1">logical = psutil.cpu_count()</span>
+        <span class="s1">self.assertIsNotNone(logical)</span>
+        <span class="s1">self.assertEqual(logical</span><span class="s3">, </span><span class="s1">len(psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)))</span>
+        <span class="s1">self.assertGreaterEqual(logical</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s0">#</span>
+        <span class="s3">if </span><span class="s1">os.path.exists(</span><span class="s4">&quot;/proc/cpuinfo&quot;</span><span class="s1">):</span>
+            <span class="s3">with </span><span class="s1">open(</span><span class="s4">&quot;/proc/cpuinfo&quot;</span><span class="s1">) </span><span class="s3">as </span><span class="s1">fd:</span>
+                <span class="s1">cpuinfo_data = fd.read()</span>
+            <span class="s3">if </span><span class="s4">&quot;physical id&quot; </span><span class="s3">not in </span><span class="s1">cpuinfo_data:</span>
+                <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span><span class="s4">&quot;cpuinfo doesn't include physical id&quot;</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_cores(self):</span>
+        <span class="s1">logical = psutil.cpu_count()</span>
+        <span class="s1">cores = psutil.cpu_count(logical=</span><span class="s3">False</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">cores </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">self.skipTest(</span><span class="s4">&quot;cpu_count_cores() is None&quot;</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">WINDOWS </span><span class="s3">and </span><span class="s1">sys.getwindowsversion()[:</span><span class="s5">2</span><span class="s1">] &lt;= (</span><span class="s5">6</span><span class="s3">, </span><span class="s5">1</span><span class="s1">):  </span><span class="s0"># &lt;= Vista</span>
+            <span class="s1">self.assertIsNone(cores)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertGreaterEqual(cores</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">self.assertGreaterEqual(logical</span><span class="s3">, </span><span class="s1">cores)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_none(self):</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/1085</span>
+        <span class="s3">for </span><span class="s1">val </span><span class="s3">in </span><span class="s1">(-</span><span class="s5">1</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, None</span><span class="s1">):</span>
+            <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psplatform.cpu_count_logical'</span><span class="s3">,</span>
+                            <span class="s1">return_value=val) </span><span class="s3">as </span><span class="s1">m:</span>
+                <span class="s1">self.assertIsNone(psutil.cpu_count())</span>
+                <span class="s3">assert </span><span class="s1">m.called</span>
+            <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psplatform.cpu_count_cores'</span><span class="s3">,</span>
+                            <span class="s1">return_value=val) </span><span class="s3">as </span><span class="s1">m:</span>
+                <span class="s1">self.assertIsNone(psutil.cpu_count(logical=</span><span class="s3">False</span><span class="s1">))</span>
+                <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_times(self):</span>
+        <span class="s0"># Check type, value &gt;= 0, str().</span>
+        <span class="s1">total = </span><span class="s5">0</span>
+        <span class="s1">times = psutil.cpu_times()</span>
+        <span class="s1">sum(times)</span>
+        <span class="s3">for </span><span class="s1">cp_time </span><span class="s3">in </span><span class="s1">times:</span>
+            <span class="s1">self.assertIsInstance(cp_time</span><span class="s3">, </span><span class="s1">float)</span>
+            <span class="s1">self.assertGreaterEqual(cp_time</span><span class="s3">, </span><span class="s5">0.0</span><span class="s1">)</span>
+            <span class="s1">total += cp_time</span>
+        <span class="s1">self.assertEqual(total</span><span class="s3">, </span><span class="s1">sum(times))</span>
+        <span class="s1">str(times)</span>
+        <span class="s0"># CPU times are always supposed to increase over time</span>
+        <span class="s0"># or at least remain the same and that's because time</span>
+        <span class="s0"># cannot go backwards.</span>
+        <span class="s0"># Surprisingly sometimes this might not be the case (at</span>
+        <span class="s0"># least on Windows and Linux), see:</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/392</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/645</span>
+        <span class="s0"># if not WINDOWS:</span>
+        <span class="s0">#     last = psutil.cpu_times()</span>
+        <span class="s0">#     for x in range(100):</span>
+        <span class="s0">#         new = psutil.cpu_times()</span>
+        <span class="s0">#         for field in new._fields:</span>
+        <span class="s0">#             new_t = getattr(new, field)</span>
+        <span class="s0">#             last_t = getattr(last, field)</span>
+        <span class="s0">#             self.assertGreaterEqual(new_t, last_t,</span>
+        <span class="s0">#                                     msg=&quot;%s %s&quot; % (new_t, last_t))</span>
+        <span class="s0">#         last = new</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_times_time_increases(self):</span>
+        <span class="s0"># Make sure time increases between calls.</span>
+        <span class="s1">t1 = sum(psutil.cpu_times())</span>
+        <span class="s1">stop_at = time.time() + GLOBAL_TIMEOUT</span>
+        <span class="s3">while </span><span class="s1">time.time() &lt; stop_at:</span>
+            <span class="s1">t2 = sum(psutil.cpu_times())</span>
+            <span class="s3">if </span><span class="s1">t2 &gt; t1:</span>
+                <span class="s3">return</span>
+        <span class="s3">raise </span><span class="s1">self.fail(</span><span class="s4">&quot;time remained the same&quot;</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_per_cpu_times(self):</span>
+        <span class="s0"># Check type, value &gt;= 0, str().</span>
+        <span class="s3">for </span><span class="s1">times </span><span class="s3">in </span><span class="s1">psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">):</span>
+            <span class="s1">total = </span><span class="s5">0</span>
+            <span class="s1">sum(times)</span>
+            <span class="s3">for </span><span class="s1">cp_time </span><span class="s3">in </span><span class="s1">times:</span>
+                <span class="s1">self.assertIsInstance(cp_time</span><span class="s3">, </span><span class="s1">float)</span>
+                <span class="s1">self.assertGreaterEqual(cp_time</span><span class="s3">, </span><span class="s5">0.0</span><span class="s1">)</span>
+                <span class="s1">total += cp_time</span>
+            <span class="s1">self.assertEqual(total</span><span class="s3">, </span><span class="s1">sum(times))</span>
+            <span class="s1">str(times)</span>
+        <span class="s1">self.assertEqual(len(psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">])</span><span class="s3">,</span>
+                         <span class="s1">len(psutil.cpu_times(percpu=</span><span class="s3">False</span><span class="s1">)))</span>
+
+        <span class="s0"># Note: in theory CPU times are always supposed to increase over</span>
+        <span class="s0"># time or remain the same but never go backwards. In practice</span>
+        <span class="s0"># sometimes this is not the case.</span>
+        <span class="s0"># This issue seemd to be afflict Windows:</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/392</span>
+        <span class="s0"># ...but it turns out also Linux (rarely) behaves the same.</span>
+        <span class="s0"># last = psutil.cpu_times(percpu=True)</span>
+        <span class="s0"># for x in range(100):</span>
+        <span class="s0">#     new = psutil.cpu_times(percpu=True)</span>
+        <span class="s0">#     for index in range(len(new)):</span>
+        <span class="s0">#         newcpu = new[index]</span>
+        <span class="s0">#         lastcpu = last[index]</span>
+        <span class="s0">#         for field in newcpu._fields:</span>
+        <span class="s0">#             new_t = getattr(newcpu, field)</span>
+        <span class="s0">#             last_t = getattr(lastcpu, field)</span>
+        <span class="s0">#             self.assertGreaterEqual(</span>
+        <span class="s0">#                 new_t, last_t, msg=&quot;%s %s&quot; % (lastcpu, newcpu))</span>
+        <span class="s0">#     last = new</span>
+
+    <span class="s3">def </span><span class="s1">test_per_cpu_times_2(self):</span>
+        <span class="s0"># Simulate some work load then make sure time have increased</span>
+        <span class="s0"># between calls.</span>
+        <span class="s1">tot1 = psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">giveup_at = time.time() + GLOBAL_TIMEOUT</span>
+        <span class="s3">while True</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">time.time() &gt;= giveup_at:</span>
+                <span class="s3">return </span><span class="s1">self.fail(</span><span class="s4">&quot;timeout&quot;</span><span class="s1">)</span>
+            <span class="s1">tot2 = psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">t1</span><span class="s3">, </span><span class="s1">t2 </span><span class="s3">in </span><span class="s1">zip(tot1</span><span class="s3">, </span><span class="s1">tot2):</span>
+                <span class="s1">t1</span><span class="s3">, </span><span class="s1">t2 = psutil._cpu_busy_time(t1)</span><span class="s3">, </span><span class="s1">psutil._cpu_busy_time(t2)</span>
+                <span class="s1">difference = t2 - t1</span>
+                <span class="s3">if </span><span class="s1">difference &gt;= </span><span class="s5">0.05</span><span class="s1">:</span>
+                    <span class="s3">return</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_times_comparison(self):</span>
+        <span class="s0"># Make sure the sum of all per cpu times is almost equal to</span>
+        <span class="s0"># base &quot;one cpu&quot; times.</span>
+        <span class="s1">base = psutil.cpu_times()</span>
+        <span class="s1">per_cpu = psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">summed_values = base._make([sum(num) </span><span class="s3">for </span><span class="s1">num </span><span class="s3">in </span><span class="s1">zip(*per_cpu)])</span>
+        <span class="s3">for </span><span class="s1">field </span><span class="s3">in </span><span class="s1">base._fields:</span>
+            <span class="s1">self.assertAlmostEqual(</span>
+                <span class="s1">getattr(base</span><span class="s3">, </span><span class="s1">field)</span><span class="s3">, </span><span class="s1">getattr(summed_values</span><span class="s3">, </span><span class="s1">field)</span><span class="s3">, </span><span class="s1">delta=</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">_test_cpu_percent(self</span><span class="s3">, </span><span class="s1">percent</span><span class="s3">, </span><span class="s1">last_ret</span><span class="s3">, </span><span class="s1">new_ret):</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">self.assertIsInstance(percent</span><span class="s3">, </span><span class="s1">float)</span>
+            <span class="s1">self.assertGreaterEqual(percent</span><span class="s3">, </span><span class="s5">0.0</span><span class="s1">)</span>
+            <span class="s1">self.assertIsNot(percent</span><span class="s3">, </span><span class="s1">-</span><span class="s5">0.0</span><span class="s1">)</span>
+            <span class="s1">self.assertLessEqual(percent</span><span class="s3">, </span><span class="s5">100.0 </span><span class="s1">* psutil.cpu_count())</span>
+        <span class="s3">except </span><span class="s1">AssertionError </span><span class="s3">as </span><span class="s1">err:</span>
+            <span class="s3">raise </span><span class="s1">AssertionError(</span><span class="s4">&quot;</span><span class="s3">\n</span><span class="s4">%s</span><span class="s3">\n</span><span class="s4">last=%s</span><span class="s3">\n</span><span class="s4">new=%s&quot; </span><span class="s1">% (</span>
+                <span class="s1">err</span><span class="s3">, </span><span class="s1">pprint.pformat(last_ret)</span><span class="s3">, </span><span class="s1">pprint.pformat(new_ret)))</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_percent(self):</span>
+        <span class="s1">last = psutil.cpu_percent(interval=</span><span class="s5">0.001</span><span class="s1">)</span>
+        <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">range(</span><span class="s5">100</span><span class="s1">):</span>
+            <span class="s1">new = psutil.cpu_percent(interval=</span><span class="s3">None</span><span class="s1">)</span>
+            <span class="s1">self._test_cpu_percent(new</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+            <span class="s1">last = new</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(ValueError):</span>
+            <span class="s1">psutil.cpu_percent(interval=-</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_per_cpu_percent(self):</span>
+        <span class="s1">last = psutil.cpu_percent(interval=</span><span class="s5">0.001</span><span class="s3">, </span><span class="s1">percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(len(last)</span><span class="s3">, </span><span class="s1">psutil.cpu_count())</span>
+        <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">range(</span><span class="s5">100</span><span class="s1">):</span>
+            <span class="s1">new = psutil.cpu_percent(interval=</span><span class="s3">None, </span><span class="s1">percpu=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">percent </span><span class="s3">in </span><span class="s1">new:</span>
+                <span class="s1">self._test_cpu_percent(percent</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+            <span class="s1">last = new</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(ValueError):</span>
+            <span class="s1">psutil.cpu_percent(interval=-</span><span class="s5">1</span><span class="s3">, </span><span class="s1">percpu=</span><span class="s3">True</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_times_percent(self):</span>
+        <span class="s1">last = psutil.cpu_times_percent(interval=</span><span class="s5">0.001</span><span class="s1">)</span>
+        <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">range(</span><span class="s5">100</span><span class="s1">):</span>
+            <span class="s1">new = psutil.cpu_times_percent(interval=</span><span class="s3">None</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">percent </span><span class="s3">in </span><span class="s1">new:</span>
+                <span class="s1">self._test_cpu_percent(percent</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+            <span class="s1">self._test_cpu_percent(sum(new)</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+            <span class="s1">last = new</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(ValueError):</span>
+            <span class="s1">psutil.cpu_times_percent(interval=-</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_per_cpu_times_percent(self):</span>
+        <span class="s1">last = psutil.cpu_times_percent(interval=</span><span class="s5">0.001</span><span class="s3">, </span><span class="s1">percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(len(last)</span><span class="s3">, </span><span class="s1">psutil.cpu_count())</span>
+        <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">range(</span><span class="s5">100</span><span class="s1">):</span>
+            <span class="s1">new = psutil.cpu_times_percent(interval=</span><span class="s3">None, </span><span class="s1">percpu=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">new:</span>
+                <span class="s3">for </span><span class="s1">percent </span><span class="s3">in </span><span class="s1">cpu:</span>
+                    <span class="s1">self._test_cpu_percent(percent</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+                <span class="s1">self._test_cpu_percent(sum(cpu)</span><span class="s3">, </span><span class="s1">last</span><span class="s3">, </span><span class="s1">new)</span>
+            <span class="s1">last = new</span>
+
+    <span class="s3">def </span><span class="s1">test_per_cpu_times_percent_negative(self):</span>
+        <span class="s0"># see: https://github.com/giampaolo/psutil/issues/645</span>
+        <span class="s1">psutil.cpu_times_percent(percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">zero_times = [x._make([</span><span class="s5">0 </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">range(len(x._fields))])</span>
+                      <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.cpu_times(percpu=</span><span class="s3">True</span><span class="s1">)]</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.cpu_times'</span><span class="s3">, </span><span class="s1">return_value=zero_times):</span>
+            <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">psutil.cpu_times_percent(percpu=</span><span class="s3">True</span><span class="s1">):</span>
+                <span class="s3">for </span><span class="s1">percent </span><span class="s3">in </span><span class="s1">cpu:</span>
+                    <span class="s1">self._test_cpu_percent(percent</span><span class="s3">, None, None</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_stats(self):</span>
+        <span class="s0"># Tested more extensively in per-platform test modules.</span>
+        <span class="s1">infos = psutil.cpu_stats()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">infos._fields</span><span class="s3">,</span>
+            <span class="s1">(</span><span class="s4">'ctx_switches'</span><span class="s3">, </span><span class="s4">'interrupts'</span><span class="s3">, </span><span class="s4">'soft_interrupts'</span><span class="s3">, </span><span class="s4">'syscalls'</span><span class="s1">))</span>
+        <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">infos._fields:</span>
+            <span class="s1">value = getattr(infos</span><span class="s3">, </span><span class="s1">name)</span>
+            <span class="s1">self.assertGreaterEqual(value</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s0"># on AIX, ctx_switches is always 0</span>
+            <span class="s3">if not </span><span class="s1">AIX </span><span class="s3">and </span><span class="s1">name </span><span class="s3">in </span><span class="s1">(</span><span class="s4">'ctx_switches'</span><span class="s3">, </span><span class="s4">'interrupts'</span><span class="s1">):</span>
+                <span class="s1">self.assertGreater(value</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+    <span class="s0"># TODO: remove this once 1892 is fixed</span>
+    <span class="s1">@unittest.skipIf(MACOS </span><span class="s3">and </span><span class="s1">platform.machine() == </span><span class="s4">'arm64'</span><span class="s3">,</span>
+                     <span class="s4">&quot;skipped due to #1892&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_CPU_FREQ</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_cpu_freq(self):</span>
+        <span class="s3">def </span><span class="s1">check_ls(ls):</span>
+            <span class="s3">for </span><span class="s1">nt </span><span class="s3">in </span><span class="s1">ls:</span>
+                <span class="s1">self.assertEqual(nt._fields</span><span class="s3">, </span><span class="s1">(</span><span class="s4">'current'</span><span class="s3">, </span><span class="s4">'min'</span><span class="s3">, </span><span class="s4">'max'</span><span class="s1">))</span>
+                <span class="s3">if </span><span class="s1">nt.max != </span><span class="s5">0.0</span><span class="s1">:</span>
+                    <span class="s1">self.assertLessEqual(nt.current</span><span class="s3">, </span><span class="s1">nt.max)</span>
+                <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">nt._fields:</span>
+                    <span class="s1">value = getattr(nt</span><span class="s3">, </span><span class="s1">name)</span>
+                    <span class="s1">self.assertIsInstance(value</span><span class="s3">, </span><span class="s1">(int</span><span class="s3">, </span><span class="s1">long</span><span class="s3">, </span><span class="s1">float))</span>
+                    <span class="s1">self.assertGreaterEqual(value</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+        <span class="s1">ls = psutil.cpu_freq(percpu=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">FREEBSD </span><span class="s3">and not </span><span class="s1">ls:</span>
+            <span class="s3">raise </span><span class="s1">self.skipTest(</span><span class="s4">&quot;returns empty list on FreeBSD&quot;</span><span class="s1">)</span>
+
+        <span class="s3">assert </span><span class="s1">ls</span><span class="s3">, </span><span class="s1">ls</span>
+        <span class="s1">check_ls([psutil.cpu_freq(percpu=</span><span class="s3">False</span><span class="s1">)])</span>
+
+        <span class="s3">if </span><span class="s1">LINUX:</span>
+            <span class="s1">self.assertEqual(len(ls)</span><span class="s3">, </span><span class="s1">psutil.cpu_count())</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_GETLOADAVG</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_getloadavg(self):</span>
+        <span class="s1">loadavg = psutil.getloadavg()</span>
+        <span class="s1">self.assertEqual(len(loadavg)</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+        <span class="s3">for </span><span class="s1">load </span><span class="s3">in </span><span class="s1">loadavg:</span>
+            <span class="s1">self.assertIsInstance(load</span><span class="s3">, </span><span class="s1">float)</span>
+            <span class="s1">self.assertGreaterEqual(load</span><span class="s3">, </span><span class="s5">0.0</span><span class="s1">)</span>
+
+
+<span class="s3">class </span><span class="s1">TestDiskAPIs(PsutilTestCase):</span>
+
+    <span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and not </span><span class="s1">IS_64BIT</span><span class="s3">, </span><span class="s4">&quot;unreliable on PYPY32 + 32BIT&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_disk_usage(self):</span>
+        <span class="s1">usage = psutil.disk_usage(os.getcwd())</span>
+        <span class="s1">self.assertEqual(usage._fields</span><span class="s3">, </span><span class="s1">(</span><span class="s4">'total'</span><span class="s3">, </span><span class="s4">'used'</span><span class="s3">, </span><span class="s4">'free'</span><span class="s3">, </span><span class="s4">'percent'</span><span class="s1">))</span>
+
+        <span class="s3">assert </span><span class="s1">usage.total &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">usage</span>
+        <span class="s3">assert </span><span class="s1">usage.used &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">usage</span>
+        <span class="s3">assert </span><span class="s1">usage.free &gt; </span><span class="s5">0</span><span class="s3">, </span><span class="s1">usage</span>
+        <span class="s3">assert </span><span class="s1">usage.total &gt; usage.used</span><span class="s3">, </span><span class="s1">usage</span>
+        <span class="s3">assert </span><span class="s1">usage.total &gt; usage.free</span><span class="s3">, </span><span class="s1">usage</span>
+        <span class="s3">assert </span><span class="s5">0 </span><span class="s1">&lt;= usage.percent &lt;= </span><span class="s5">100</span><span class="s3">, </span><span class="s1">usage.percent</span>
+        <span class="s3">if </span><span class="s1">hasattr(shutil</span><span class="s3">, </span><span class="s4">'disk_usage'</span><span class="s1">):</span>
+            <span class="s0"># py &gt;= 3.3, see: http://bugs.python.org/issue12442</span>
+            <span class="s1">shutil_usage = shutil.disk_usage(os.getcwd())</span>
+            <span class="s1">tolerance = </span><span class="s5">5 </span><span class="s1">* </span><span class="s5">1024 </span><span class="s1">* </span><span class="s5">1024  </span><span class="s0"># 5MB</span>
+            <span class="s1">self.assertEqual(usage.total</span><span class="s3">, </span><span class="s1">shutil_usage.total)</span>
+            <span class="s1">self.assertAlmostEqual(usage.free</span><span class="s3">, </span><span class="s1">shutil_usage.free</span><span class="s3">,</span>
+                                   <span class="s1">delta=tolerance)</span>
+            <span class="s3">if not </span><span class="s1">MACOS_12PLUS:</span>
+                <span class="s0"># see https://github.com/giampaolo/psutil/issues/2147</span>
+                <span class="s1">self.assertAlmostEqual(usage.used</span><span class="s3">, </span><span class="s1">shutil_usage.used</span><span class="s3">,</span>
+                                       <span class="s1">delta=tolerance)</span>
+
+        <span class="s0"># if path does not exist OSError ENOENT is expected across</span>
+        <span class="s0"># all platforms</span>
+        <span class="s1">fname = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(FileNotFoundError):</span>
+            <span class="s1">psutil.disk_usage(fname)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">ASCII_FS</span><span class="s3">, </span><span class="s4">&quot;not an ASCII fs&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_disk_usage_unicode(self):</span>
+        <span class="s0"># See: https://github.com/giampaolo/psutil/issues/416</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(UnicodeEncodeError):</span>
+            <span class="s1">psutil.disk_usage(UNICODE_SUFFIX)</span>
+
+    <span class="s3">def </span><span class="s1">test_disk_usage_bytes(self):</span>
+        <span class="s1">psutil.disk_usage(</span><span class="s6">b'.'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_disk_partitions(self):</span>
+        <span class="s3">def </span><span class="s1">check_ntuple(nt):</span>
+            <span class="s1">self.assertIsInstance(nt.device</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(nt.mountpoint</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(nt.fstype</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(nt.opts</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(nt.maxfile</span><span class="s3">, </span><span class="s1">(int</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+            <span class="s1">self.assertIsInstance(nt.maxpath</span><span class="s3">, </span><span class="s1">(int</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+            <span class="s3">if </span><span class="s1">nt.maxfile </span><span class="s3">is not None and not </span><span class="s1">GITHUB_ACTIONS:</span>
+                <span class="s1">self.assertGreater(nt.maxfile</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">nt.maxpath </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">self.assertGreater(nt.maxpath</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+        <span class="s0"># all = False</span>
+        <span class="s1">ls = psutil.disk_partitions(all=</span><span class="s3">False</span><span class="s1">)</span>
+        <span class="s1">self.assertTrue(ls</span><span class="s3">, </span><span class="s1">msg=ls)</span>
+        <span class="s3">for </span><span class="s1">disk </span><span class="s3">in </span><span class="s1">ls:</span>
+            <span class="s1">check_ntuple(disk)</span>
+            <span class="s3">if </span><span class="s1">WINDOWS </span><span class="s3">and </span><span class="s4">'cdrom' </span><span class="s3">in </span><span class="s1">disk.opts:</span>
+                <span class="s3">continue</span>
+            <span class="s3">if not </span><span class="s1">POSIX:</span>
+                <span class="s3">assert </span><span class="s1">os.path.exists(disk.device)</span><span class="s3">, </span><span class="s1">disk</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s0"># we cannot make any assumption about this, see:</span>
+                <span class="s0"># http://goo.gl/p9c43</span>
+                <span class="s1">disk.device</span>
+            <span class="s0"># on modern systems mount points can also be files</span>
+            <span class="s3">assert </span><span class="s1">os.path.exists(disk.mountpoint)</span><span class="s3">, </span><span class="s1">disk</span>
+            <span class="s3">assert </span><span class="s1">disk.fstype</span><span class="s3">, </span><span class="s1">disk</span>
+
+        <span class="s0"># all = True</span>
+        <span class="s1">ls = psutil.disk_partitions(all=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">self.assertTrue(ls</span><span class="s3">, </span><span class="s1">msg=ls)</span>
+        <span class="s3">for </span><span class="s1">disk </span><span class="s3">in </span><span class="s1">psutil.disk_partitions(all=</span><span class="s3">True</span><span class="s1">):</span>
+            <span class="s1">check_ntuple(disk)</span>
+            <span class="s3">if not </span><span class="s1">WINDOWS </span><span class="s3">and </span><span class="s1">disk.mountpoint:</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s1">os.stat(disk.mountpoint)</span>
+                <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">err:</span>
+                    <span class="s3">if </span><span class="s1">GITHUB_ACTIONS </span><span class="s3">and </span><span class="s1">MACOS </span><span class="s3">and </span><span class="s1">err.errno == errno.EIO:</span>
+                        <span class="s3">continue</span>
+                    <span class="s0"># http://mail.python.org/pipermail/python-dev/</span>
+                    <span class="s0">#     2012-June/120787.html</span>
+                    <span class="s3">if </span><span class="s1">err.errno </span><span class="s3">not in </span><span class="s1">(errno.EPERM</span><span class="s3">, </span><span class="s1">errno.EACCES):</span>
+                        <span class="s3">raise</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s3">assert </span><span class="s1">os.path.exists(disk.mountpoint)</span><span class="s3">, </span><span class="s1">disk</span>
+
+        <span class="s0"># ---</span>
+
+        <span class="s3">def </span><span class="s1">find_mount_point(path):</span>
+            <span class="s1">path = os.path.abspath(path)</span>
+            <span class="s3">while not </span><span class="s1">os.path.ismount(path):</span>
+                <span class="s1">path = os.path.dirname(path)</span>
+            <span class="s3">return </span><span class="s1">path.lower()</span>
+
+        <span class="s1">mount = find_mount_point(__file__)</span>
+        <span class="s1">mounts = [x.mountpoint.lower() </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in</span>
+                  <span class="s1">psutil.disk_partitions(all=</span><span class="s3">True</span><span class="s1">) </span><span class="s3">if </span><span class="s1">x.mountpoint]</span>
+        <span class="s1">self.assertIn(mount</span><span class="s3">, </span><span class="s1">mounts)</span>
+
+    <span class="s1">@unittest.skipIf(LINUX </span><span class="s3">and not </span><span class="s1">os.path.exists(</span><span class="s4">'/proc/diskstats'</span><span class="s1">)</span><span class="s3">,</span>
+                     <span class="s4">'/proc/diskstats not available on this linux version'</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(CI_TESTING </span><span class="s3">and not </span><span class="s1">psutil.disk_io_counters()</span><span class="s3">,</span>
+                     <span class="s4">&quot;unreliable on CI&quot;</span><span class="s1">)  </span><span class="s0"># no visible disks</span>
+    <span class="s3">def </span><span class="s1">test_disk_io_counters(self):</span>
+        <span class="s3">def </span><span class="s1">check_ntuple(nt):</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">0</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.read_count)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">1</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.write_count)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">2</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.read_bytes)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">3</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.write_bytes)</span>
+            <span class="s3">if not </span><span class="s1">(OPENBSD </span><span class="s3">or </span><span class="s1">NETBSD):</span>
+                <span class="s1">self.assertEqual(nt[</span><span class="s5">4</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.read_time)</span>
+                <span class="s1">self.assertEqual(nt[</span><span class="s5">5</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.write_time)</span>
+                <span class="s3">if </span><span class="s1">LINUX:</span>
+                    <span class="s1">self.assertEqual(nt[</span><span class="s5">6</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.read_merged_count)</span>
+                    <span class="s1">self.assertEqual(nt[</span><span class="s5">7</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.write_merged_count)</span>
+                    <span class="s1">self.assertEqual(nt[</span><span class="s5">8</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.busy_time)</span>
+                <span class="s3">elif </span><span class="s1">FREEBSD:</span>
+                    <span class="s1">self.assertEqual(nt[</span><span class="s5">6</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.busy_time)</span>
+            <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">nt._fields:</span>
+                <span class="s3">assert </span><span class="s1">getattr(nt</span><span class="s3">, </span><span class="s1">name) &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+
+        <span class="s1">ret = psutil.disk_io_counters(perdisk=</span><span class="s3">False</span><span class="s1">)</span>
+        <span class="s3">assert </span><span class="s1">ret </span><span class="s3">is not None, </span><span class="s4">&quot;no disks on this system?&quot;</span>
+        <span class="s1">check_ntuple(ret)</span>
+        <span class="s1">ret = psutil.disk_io_counters(perdisk=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s0"># make sure there are no duplicates</span>
+        <span class="s1">self.assertEqual(len(ret)</span><span class="s3">, </span><span class="s1">len(set(ret)))</span>
+        <span class="s3">for </span><span class="s1">key </span><span class="s3">in </span><span class="s1">ret:</span>
+            <span class="s3">assert </span><span class="s1">key</span><span class="s3">, </span><span class="s1">key</span>
+            <span class="s1">check_ntuple(ret[key])</span>
+
+    <span class="s3">def </span><span class="s1">test_disk_io_counters_no_disks(self):</span>
+        <span class="s0"># Emulate a case where no disks are installed, see:</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/1062</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psplatform.disk_io_counters'</span><span class="s3">,</span>
+                        <span class="s1">return_value={}) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertIsNone(psutil.disk_io_counters(perdisk=</span><span class="s3">False</span><span class="s1">))</span>
+            <span class="s1">self.assertEqual(psutil.disk_io_counters(perdisk=</span><span class="s3">True</span><span class="s1">)</span><span class="s3">, </span><span class="s1">{})</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+
+<span class="s3">class </span><span class="s1">TestNetAPIs(PsutilTestCase):</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_NET_IO_COUNTERS</span><span class="s3">, </span><span class="s4">'not supported'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_net_io_counters(self):</span>
+        <span class="s3">def </span><span class="s1">check_ntuple(nt):</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">0</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.bytes_sent)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">1</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.bytes_recv)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">2</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.packets_sent)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">3</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.packets_recv)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">4</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.errin)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">5</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.errout)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">6</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.dropin)</span>
+            <span class="s1">self.assertEqual(nt[</span><span class="s5">7</span><span class="s1">]</span><span class="s3">, </span><span class="s1">nt.dropout)</span>
+            <span class="s3">assert </span><span class="s1">nt.bytes_sent &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.bytes_recv &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.packets_sent &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.packets_recv &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.errin &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.errout &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.dropin &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+            <span class="s3">assert </span><span class="s1">nt.dropout &gt;= </span><span class="s5">0</span><span class="s3">, </span><span class="s1">nt</span>
+
+        <span class="s1">ret = psutil.net_io_counters(pernic=</span><span class="s3">False</span><span class="s1">)</span>
+        <span class="s1">check_ntuple(ret)</span>
+        <span class="s1">ret = psutil.net_io_counters(pernic=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">self.assertNotEqual(ret</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s3">for </span><span class="s1">key </span><span class="s3">in </span><span class="s1">ret:</span>
+            <span class="s1">self.assertTrue(key)</span>
+            <span class="s1">self.assertIsInstance(key</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">check_ntuple(ret[key])</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_NET_IO_COUNTERS</span><span class="s3">, </span><span class="s4">'not supported'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_net_io_counters_no_nics(self):</span>
+        <span class="s0"># Emulate a case where no NICs are installed, see:</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/1062</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psplatform.net_io_counters'</span><span class="s3">,</span>
+                        <span class="s1">return_value={}) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">self.assertIsNone(psutil.net_io_counters(pernic=</span><span class="s3">False</span><span class="s1">))</span>
+            <span class="s1">self.assertEqual(psutil.net_io_counters(pernic=</span><span class="s3">True</span><span class="s1">)</span><span class="s3">, </span><span class="s1">{})</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_net_if_addrs(self):</span>
+        <span class="s1">nics = psutil.net_if_addrs()</span>
+        <span class="s3">assert </span><span class="s1">nics</span><span class="s3">, </span><span class="s1">nics</span>
+
+        <span class="s1">nic_stats = psutil.net_if_stats()</span>
+
+        <span class="s0"># Not reliable on all platforms (net_if_addrs() reports more</span>
+        <span class="s0"># interfaces).</span>
+        <span class="s0"># self.assertEqual(sorted(nics.keys()),</span>
+        <span class="s0">#                  sorted(psutil.net_io_counters(pernic=True).keys()))</span>
+
+        <span class="s1">families = set([socket.AF_INET</span><span class="s3">, </span><span class="s1">socket.AF_INET6</span><span class="s3">, </span><span class="s1">psutil.AF_LINK])</span>
+        <span class="s3">for </span><span class="s1">nic</span><span class="s3">, </span><span class="s1">addrs </span><span class="s3">in </span><span class="s1">nics.items():</span>
+            <span class="s1">self.assertIsInstance(nic</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertEqual(len(set(addrs))</span><span class="s3">, </span><span class="s1">len(addrs))</span>
+            <span class="s3">for </span><span class="s1">addr </span><span class="s3">in </span><span class="s1">addrs:</span>
+                <span class="s1">self.assertIsInstance(addr.family</span><span class="s3">, </span><span class="s1">int)</span>
+                <span class="s1">self.assertIsInstance(addr.address</span><span class="s3">, </span><span class="s1">str)</span>
+                <span class="s1">self.assertIsInstance(addr.netmask</span><span class="s3">, </span><span class="s1">(str</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+                <span class="s1">self.assertIsInstance(addr.broadcast</span><span class="s3">, </span><span class="s1">(str</span><span class="s3">, </span><span class="s1">type(</span><span class="s3">None</span><span class="s1">)))</span>
+                <span class="s1">self.assertIn(addr.family</span><span class="s3">, </span><span class="s1">families)</span>
+                <span class="s3">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s5">3</span><span class="s3">, </span><span class="s5">4</span><span class="s1">) </span><span class="s3">and not </span><span class="s1">PYPY:</span>
+                    <span class="s1">self.assertIsInstance(addr.family</span><span class="s3">, </span><span class="s1">enum.IntEnum)</span>
+                <span class="s3">if </span><span class="s1">nic_stats[nic].isup:</span>
+                    <span class="s0"># Do not test binding to addresses of interfaces</span>
+                    <span class="s0"># that are down</span>
+                    <span class="s3">if </span><span class="s1">addr.family == socket.AF_INET:</span>
+                        <span class="s1">s = socket.socket(addr.family)</span>
+                        <span class="s3">with </span><span class="s1">contextlib.closing(s):</span>
+                            <span class="s1">s.bind((addr.address</span><span class="s3">, </span><span class="s5">0</span><span class="s1">))</span>
+                    <span class="s3">elif </span><span class="s1">addr.family == socket.AF_INET6:</span>
+                        <span class="s1">info = socket.getaddrinfo(</span>
+                            <span class="s1">addr.address</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">socket.AF_INET6</span><span class="s3">,</span>
+                            <span class="s1">socket.SOCK_STREAM</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">socket.AI_PASSIVE)[</span><span class="s5">0</span><span class="s1">]</span>
+                        <span class="s1">af</span><span class="s3">, </span><span class="s1">socktype</span><span class="s3">, </span><span class="s1">proto</span><span class="s3">, </span><span class="s1">canonname</span><span class="s3">, </span><span class="s1">sa = info</span>
+                        <span class="s1">s = socket.socket(af</span><span class="s3">, </span><span class="s1">socktype</span><span class="s3">, </span><span class="s1">proto)</span>
+                        <span class="s3">with </span><span class="s1">contextlib.closing(s):</span>
+                            <span class="s1">s.bind(sa)</span>
+                <span class="s3">for </span><span class="s1">ip </span><span class="s3">in </span><span class="s1">(addr.address</span><span class="s3">, </span><span class="s1">addr.netmask</span><span class="s3">, </span><span class="s1">addr.broadcast</span><span class="s3">,</span>
+                           <span class="s1">addr.ptp):</span>
+                    <span class="s3">if </span><span class="s1">ip </span><span class="s3">is not None</span><span class="s1">:</span>
+                        <span class="s0"># TODO: skip AF_INET6 for now because I get:</span>
+                        <span class="s0"># AddressValueError: Only hex digits permitted in</span>
+                        <span class="s0"># u'c6f3%lxcbr0' in u'fe80::c8e0:fff:fe54:c6f3%lxcbr0'</span>
+                        <span class="s3">if </span><span class="s1">addr.family != socket.AF_INET6:</span>
+                            <span class="s1">check_net_address(ip</span><span class="s3">, </span><span class="s1">addr.family)</span>
+                <span class="s0"># broadcast and ptp addresses are mutually exclusive</span>
+                <span class="s3">if </span><span class="s1">addr.broadcast:</span>
+                    <span class="s1">self.assertIsNone(addr.ptp)</span>
+                <span class="s3">elif </span><span class="s1">addr.ptp:</span>
+                    <span class="s1">self.assertIsNone(addr.broadcast)</span>
+
+        <span class="s3">if </span><span class="s1">BSD </span><span class="s3">or </span><span class="s1">MACOS </span><span class="s3">or </span><span class="s1">SUNOS:</span>
+            <span class="s3">if </span><span class="s1">hasattr(socket</span><span class="s3">, </span><span class="s4">&quot;AF_LINK&quot;</span><span class="s1">):</span>
+                <span class="s1">self.assertEqual(psutil.AF_LINK</span><span class="s3">, </span><span class="s1">socket.AF_LINK)</span>
+        <span class="s3">elif </span><span class="s1">LINUX:</span>
+            <span class="s1">self.assertEqual(psutil.AF_LINK</span><span class="s3">, </span><span class="s1">socket.AF_PACKET)</span>
+        <span class="s3">elif </span><span class="s1">WINDOWS:</span>
+            <span class="s1">self.assertEqual(psutil.AF_LINK</span><span class="s3">, </span><span class="s1">-</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_net_if_addrs_mac_null_bytes(self):</span>
+        <span class="s0"># Simulate that the underlying C function returns an incomplete</span>
+        <span class="s0"># MAC address. psutil is supposed to fill it with null bytes.</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/786</span>
+        <span class="s3">if </span><span class="s1">POSIX:</span>
+            <span class="s1">ret = [(</span><span class="s4">'em1'</span><span class="s3">, </span><span class="s1">psutil.AF_LINK</span><span class="s3">, </span><span class="s4">'06:3d:29'</span><span class="s3">, None, None, None</span><span class="s1">)]</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">ret = [(</span><span class="s4">'em1'</span><span class="s3">, </span><span class="s1">-</span><span class="s5">1</span><span class="s3">, </span><span class="s4">'06-3d-29'</span><span class="s3">, None, None, None</span><span class="s1">)]</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psplatform.net_if_addrs'</span><span class="s3">,</span>
+                        <span class="s1">return_value=ret) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">addr = psutil.net_if_addrs()[</span><span class="s4">'em1'</span><span class="s1">][</span><span class="s5">0</span><span class="s1">]</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+            <span class="s3">if </span><span class="s1">POSIX:</span>
+                <span class="s1">self.assertEqual(addr.address</span><span class="s3">, </span><span class="s4">'06:3d:29:00:00:00'</span><span class="s1">)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self.assertEqual(addr.address</span><span class="s3">, </span><span class="s4">'06-3d-29-00-00-00'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_net_if_stats(self):</span>
+        <span class="s1">nics = psutil.net_if_stats()</span>
+        <span class="s3">assert </span><span class="s1">nics</span><span class="s3">, </span><span class="s1">nics</span>
+        <span class="s1">all_duplexes = (psutil.NIC_DUPLEX_FULL</span><span class="s3">,</span>
+                        <span class="s1">psutil.NIC_DUPLEX_HALF</span><span class="s3">,</span>
+                        <span class="s1">psutil.NIC_DUPLEX_UNKNOWN)</span>
+        <span class="s3">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">stats </span><span class="s3">in </span><span class="s1">nics.items():</span>
+            <span class="s1">self.assertIsInstance(name</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">isup</span><span class="s3">, </span><span class="s1">duplex</span><span class="s3">, </span><span class="s1">speed</span><span class="s3">, </span><span class="s1">mtu</span><span class="s3">, </span><span class="s1">flags = stats</span>
+            <span class="s1">self.assertIsInstance(isup</span><span class="s3">, </span><span class="s1">bool)</span>
+            <span class="s1">self.assertIn(duplex</span><span class="s3">, </span><span class="s1">all_duplexes)</span>
+            <span class="s1">self.assertIn(duplex</span><span class="s3">, </span><span class="s1">all_duplexes)</span>
+            <span class="s1">self.assertGreaterEqual(speed</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s1">self.assertGreaterEqual(mtu</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+            <span class="s1">self.assertIsInstance(flags</span><span class="s3">, </span><span class="s1">str)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">(LINUX </span><span class="s3">or </span><span class="s1">BSD </span><span class="s3">or </span><span class="s1">MACOS)</span><span class="s3">,</span>
+                     <span class="s4">&quot;LINUX or BSD or MACOS specific&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_net_if_stats_enodev(self):</span>
+        <span class="s0"># See: https://github.com/giampaolo/psutil/issues/1279</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil._psutil_posix.net_if_mtu'</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.ENODEV</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">ret = psutil.net_if_stats()</span>
+            <span class="s1">self.assertEqual(ret</span><span class="s3">, </span><span class="s1">{})</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+
+<span class="s3">class </span><span class="s1">TestSensorsAPIs(PsutilTestCase):</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_SENSORS_TEMPERATURES</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_sensors_temperatures(self):</span>
+        <span class="s1">temps = psutil.sensors_temperatures()</span>
+        <span class="s3">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">entries </span><span class="s3">in </span><span class="s1">temps.items():</span>
+            <span class="s1">self.assertIsInstance(name</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s3">for </span><span class="s1">entry </span><span class="s3">in </span><span class="s1">entries:</span>
+                <span class="s1">self.assertIsInstance(entry.label</span><span class="s3">, </span><span class="s1">str)</span>
+                <span class="s3">if </span><span class="s1">entry.current </span><span class="s3">is not None</span><span class="s1">:</span>
+                    <span class="s1">self.assertGreaterEqual(entry.current</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+                <span class="s3">if </span><span class="s1">entry.high </span><span class="s3">is not None</span><span class="s1">:</span>
+                    <span class="s1">self.assertGreaterEqual(entry.high</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+                <span class="s3">if </span><span class="s1">entry.critical </span><span class="s3">is not None</span><span class="s1">:</span>
+                    <span class="s1">self.assertGreaterEqual(entry.critical</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_SENSORS_TEMPERATURES</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_sensors_temperatures_fahreneit(self):</span>
+        <span class="s1">d = {</span><span class="s4">'coretemp'</span><span class="s1">: [(</span><span class="s4">'label'</span><span class="s3">, </span><span class="s5">50.0</span><span class="s3">, </span><span class="s5">60.0</span><span class="s3">, </span><span class="s5">70.0</span><span class="s1">)]}</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">&quot;psutil._psplatform.sensors_temperatures&quot;</span><span class="s3">,</span>
+                        <span class="s1">return_value=d) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s1">temps = psutil.sensors_temperatures(</span>
+                <span class="s1">fahrenheit=</span><span class="s3">True</span><span class="s1">)[</span><span class="s4">'coretemp'</span><span class="s1">][</span><span class="s5">0</span><span class="s1">]</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+            <span class="s1">self.assertEqual(temps.current</span><span class="s3">, </span><span class="s5">122.0</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(temps.high</span><span class="s3">, </span><span class="s5">140.0</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(temps.critical</span><span class="s3">, </span><span class="s5">158.0</span><span class="s1">)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_SENSORS_BATTERY</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_BATTERY</span><span class="s3">, </span><span class="s4">&quot;no battery&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_sensors_battery(self):</span>
+        <span class="s1">ret = psutil.sensors_battery()</span>
+        <span class="s1">self.assertGreaterEqual(ret.percent</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.assertLessEqual(ret.percent</span><span class="s3">, </span><span class="s5">100</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">ret.secsleft </span><span class="s3">not in </span><span class="s1">(psutil.POWER_TIME_UNKNOWN</span><span class="s3">,</span>
+                                <span class="s1">psutil.POWER_TIME_UNLIMITED):</span>
+            <span class="s1">self.assertGreaterEqual(ret.secsleft</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">ret.secsleft == psutil.POWER_TIME_UNLIMITED:</span>
+                <span class="s1">self.assertTrue(ret.power_plugged)</span>
+        <span class="s1">self.assertIsInstance(ret.power_plugged</span><span class="s3">, </span><span class="s1">bool)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_SENSORS_FANS</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_sensors_fans(self):</span>
+        <span class="s1">fans = psutil.sensors_fans()</span>
+        <span class="s3">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">entries </span><span class="s3">in </span><span class="s1">fans.items():</span>
+            <span class="s1">self.assertIsInstance(name</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s3">for </span><span class="s1">entry </span><span class="s3">in </span><span class="s1">entries:</span>
+                <span class="s1">self.assertIsInstance(entry.label</span><span class="s3">, </span><span class="s1">str)</span>
+                <span class="s1">self.assertIsInstance(entry.current</span><span class="s3">, </span><span class="s1">(int</span><span class="s3">, </span><span class="s1">long))</span>
+                <span class="s1">self.assertGreaterEqual(entry.current</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s4">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

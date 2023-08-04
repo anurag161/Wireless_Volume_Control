@@ -1,0 +1,72 @@
+<html>
+<head>
+<title>test_BSTR.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_BSTR.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span><span class="s0">, </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">BSTR</span>
+<span class="s0">from </span><span class="s1">comtypes.test </span><span class="s0">import </span><span class="s1">requires</span>
+
+<span class="s2">##requires(&quot;memleaks&quot;)</span>
+
+<span class="s0">from </span><span class="s1">comtypes.test.find_memleak </span><span class="s0">import </span><span class="s1">find_memleak</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">check_leaks(self</span><span class="s0">, </span><span class="s1">func</span><span class="s0">, </span><span class="s1">limit=</span><span class="s3">0</span><span class="s1">):</span>
+        <span class="s1">bytes = find_memleak(func)</span>
+        <span class="s1">self.assertFalse(bytes &gt; limit</span><span class="s0">, </span><span class="s4">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+    <span class="s0">def </span><span class="s1">test_creation(self):</span>
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s1">BSTR(</span><span class="s4">u&quot;abcdef&quot; </span><span class="s1">* </span><span class="s3">100</span><span class="s1">)</span>
+        <span class="s2"># It seems this test is unreliable.  Sometimes it leaks 4096</span>
+        <span class="s2"># bytes, sometimes not.  Try to workaround that...</span>
+        <span class="s1">self.check_leaks(doit</span><span class="s0">, </span><span class="s1">limit=</span><span class="s3">4096</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_from_param(self):</span>
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s1">BSTR.from_param(</span><span class="s4">u&quot;abcdef&quot;</span><span class="s1">)</span>
+        <span class="s1">self.check_leaks(doit)</span>
+
+    <span class="s0">def </span><span class="s1">test_paramflags(self):</span>
+        <span class="s1">prototype = WINFUNCTYPE(c_void_p</span><span class="s0">, </span><span class="s1">BSTR)</span>
+        <span class="s1">func = prototype((</span><span class="s4">&quot;SysStringLen&quot;</span><span class="s0">, </span><span class="s1">oledll.oleaut32))</span>
+        <span class="s1">func.restype = c_void_p</span>
+        <span class="s1">func.argtypes = (BSTR</span><span class="s0">, </span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s1">func(</span><span class="s4">u&quot;abcdef&quot;</span><span class="s1">)</span>
+            <span class="s1">func(</span><span class="s4">u&quot;abc xyz&quot;</span><span class="s1">)</span>
+            <span class="s1">func(BSTR(</span><span class="s4">u&quot;abc def&quot;</span><span class="s1">))</span>
+        <span class="s1">self.check_leaks(doit)</span>
+
+    <span class="s0">def </span><span class="s1">test_inargs(self):</span>
+        <span class="s1">SysStringLen = windll.oleaut32.SysStringLen</span>
+        <span class="s1">SysStringLen.argtypes = BSTR</span><span class="s0">,</span>
+        <span class="s1">SysStringLen.restype = c_uint</span>
+
+        <span class="s1">self.assertEqual(SysStringLen(</span><span class="s4">&quot;abc xyz&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s3">7</span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">doit():</span>
+            <span class="s1">SysStringLen(</span><span class="s4">&quot;abc xyz&quot;</span><span class="s1">)</span>
+            <span class="s1">SysStringLen(</span><span class="s4">u&quot;abc xyz&quot;</span><span class="s1">)</span>
+            <span class="s1">SysStringLen(BSTR(</span><span class="s4">u&quot;abc def&quot;</span><span class="s1">))</span>
+        <span class="s1">self.check_leaks(doit)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s4">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

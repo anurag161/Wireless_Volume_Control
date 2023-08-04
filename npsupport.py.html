@@ -1,0 +1,147 @@
+<html>
+<head>
+<title>npsupport.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+npsupport.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; Consolidation of numpy support utilities. &quot;&quot;&quot;</span>
+<span class="s2">import </span><span class="s1">sys</span>
+
+<span class="s2">try</span><span class="s1">:</span>
+    <span class="s2">import </span><span class="s1">numpy</span>
+<span class="s2">except </span><span class="s1">ImportError:</span>
+    <span class="s1">numpy = </span><span class="s2">None</span>
+
+
+<span class="s1">HAVE_NUMPY = numpy </span><span class="s2">is not None</span>
+
+<span class="s1">is_64bits = sys.maxsize &gt; </span><span class="s3">2</span><span class="s1">**</span><span class="s3">32</span>
+
+
+<span class="s2">def </span><span class="s1">_make_variant_dtype():</span>
+    <span class="s0">&quot;&quot;&quot; Create a dtype for VARIANT. This requires support for Unions, which is 
+    available in numpy version 1.7 or greater. 
+ 
+    This does not support the decimal type. 
+ 
+    Returns None if the dtype cannot be created. 
+ 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># pointer typecode</span>
+    <span class="s1">ptr_typecode = </span><span class="s5">'&lt;u8' </span><span class="s2">if </span><span class="s1">is_64bits </span><span class="s2">else </span><span class="s5">'&lt;u4'</span>
+
+    <span class="s1">_tagBRECORD_format = [</span>
+        <span class="s1">(</span><span class="s5">'pvRecord'</span><span class="s2">, </span><span class="s1">ptr_typecode)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">'pRecInfo'</span><span class="s2">, </span><span class="s1">ptr_typecode)</span><span class="s2">,</span>
+    <span class="s1">]</span>
+
+    <span class="s4"># overlapping typecodes only allowed in numpy version 1.7 or greater</span>
+    <span class="s1">U_VARIANT_format = dict(</span>
+        <span class="s1">names=[</span>
+            <span class="s5">'VT_BOOL'</span><span class="s2">, </span><span class="s5">'VT_I1'</span><span class="s2">, </span><span class="s5">'VT_I2'</span><span class="s2">, </span><span class="s5">'VT_I4'</span><span class="s2">, </span><span class="s5">'VT_I8'</span><span class="s2">, </span><span class="s5">'VT_INT'</span><span class="s2">, </span><span class="s5">'VT_UI1'</span><span class="s2">,</span>
+            <span class="s5">'VT_UI2'</span><span class="s2">, </span><span class="s5">'VT_UI4'</span><span class="s2">, </span><span class="s5">'VT_UI8'</span><span class="s2">, </span><span class="s5">'VT_UINT'</span><span class="s2">, </span><span class="s5">'VT_R4'</span><span class="s2">, </span><span class="s5">'VT_R8'</span><span class="s2">, </span><span class="s5">'VT_CY'</span><span class="s2">,</span>
+            <span class="s5">'c_wchar_p'</span><span class="s2">, </span><span class="s5">'c_void_p'</span><span class="s2">, </span><span class="s5">'pparray'</span><span class="s2">, </span><span class="s5">'bstrVal'</span><span class="s2">, </span><span class="s5">'_tagBRECORD'</span><span class="s2">,</span>
+        <span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">formats=[</span>
+            <span class="s5">'&lt;i2'</span><span class="s2">, </span><span class="s5">'&lt;i1'</span><span class="s2">, </span><span class="s5">'&lt;i2'</span><span class="s2">, </span><span class="s5">'&lt;i4'</span><span class="s2">, </span><span class="s5">'&lt;i8'</span><span class="s2">, </span><span class="s5">'&lt;i4'</span><span class="s2">, </span><span class="s5">'&lt;u1'</span><span class="s2">, </span><span class="s5">'&lt;u2'</span><span class="s2">, </span><span class="s5">'&lt;u4'</span><span class="s2">,</span>
+            <span class="s5">'&lt;u8'</span><span class="s2">, </span><span class="s5">'&lt;u4'</span><span class="s2">, </span><span class="s5">'&lt;f4'</span><span class="s2">, </span><span class="s5">'&lt;f8'</span><span class="s2">, </span><span class="s5">'&lt;i8'</span><span class="s2">, </span><span class="s1">ptr_typecode</span><span class="s2">, </span><span class="s1">ptr_typecode</span><span class="s2">,</span>
+            <span class="s1">ptr_typecode</span><span class="s2">, </span><span class="s1">ptr_typecode</span><span class="s2">, </span><span class="s1">_tagBRECORD_format</span><span class="s2">,</span>
+        <span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">offsets=[</span><span class="s3">0</span><span class="s1">] * </span><span class="s3">19  </span><span class="s4"># This is what makes it a union</span>
+    <span class="s1">)</span>
+
+    <span class="s1">tagVARIANT_format = [</span>
+        <span class="s1">(</span><span class="s5">&quot;vt&quot;</span><span class="s2">, </span><span class="s5">'&lt;u2'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;wReserved1&quot;</span><span class="s2">, </span><span class="s5">'&lt;u2'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;wReserved2&quot;</span><span class="s2">, </span><span class="s5">'&lt;u2'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;wReserved3&quot;</span><span class="s2">, </span><span class="s5">'&lt;u2'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s5">&quot;_&quot;</span><span class="s2">, </span><span class="s1">U_VARIANT_format)</span><span class="s2">,</span>
+    <span class="s1">]</span>
+
+    <span class="s2">return </span><span class="s1">numpy.dtype(tagVARIANT_format)</span>
+
+
+<span class="s2">def </span><span class="s1">isndarray(value):</span>
+    <span class="s0">&quot;&quot;&quot; Check if a value is an ndarray. 
+ 
+    This cannot succeed if numpy is not available. 
+ 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">HAVE_NUMPY:</span>
+        <span class="s2">return False</span>
+    <span class="s2">return </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">numpy.ndarray)</span>
+
+
+<span class="s2">def </span><span class="s1">isdatetime64(value):</span>
+    <span class="s0">&quot;&quot;&quot; Check if a value is a datetime64. 
+ 
+    This cannot succeed if datetime64 is not available. 
+ 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">HAVE_NUMPY:</span>
+        <span class="s2">return False</span>
+    <span class="s2">return </span><span class="s1">isinstance(value</span><span class="s2">, </span><span class="s1">datetime64)</span>
+
+
+<span class="s2">def </span><span class="s1">_check_ctypeslib_typecodes():</span>
+    <span class="s2">import </span><span class="s1">numpy </span><span class="s2">as </span><span class="s1">np</span>
+    <span class="s2">from </span><span class="s1">numpy </span><span class="s2">import </span><span class="s1">ctypeslib</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">from </span><span class="s1">numpy.ctypeslib </span><span class="s2">import </span><span class="s1">_typecodes</span>
+    <span class="s2">except </span><span class="s1">ImportError:</span>
+        <span class="s2">from </span><span class="s1">numpy.ctypeslib </span><span class="s2">import </span><span class="s1">as_ctypes_type</span>
+
+        <span class="s1">dtypes_to_ctypes = {}</span>
+
+        <span class="s2">for </span><span class="s1">tp </span><span class="s2">in </span><span class="s1">set(np.sctypeDict.values()):</span>
+            <span class="s2">try</span><span class="s1">:</span>
+                <span class="s1">ctype_for = as_ctypes_type(tp)</span>
+                <span class="s1">dtypes_to_ctypes[np.dtype(tp).str] = ctype_for</span>
+            <span class="s2">except </span><span class="s1">NotImplementedError:</span>
+                <span class="s2">continue</span>
+        <span class="s1">ctypeslib._typecodes = dtypes_to_ctypes</span>
+    <span class="s2">return </span><span class="s1">ctypeslib._typecodes</span>
+
+
+<span class="s1">com_null_date64 = </span><span class="s2">None</span>
+<span class="s1">datetime64 = </span><span class="s2">None</span>
+<span class="s1">VARIANT_dtype = </span><span class="s2">None</span>
+<span class="s1">typecodes = {}</span>
+
+<span class="s2">if </span><span class="s1">HAVE_NUMPY:</span>
+    <span class="s1">typecodes = _check_ctypeslib_typecodes()</span>
+    <span class="s4"># dtype for VARIANT. This allows for packing of variants into an array, and</span>
+    <span class="s4"># subsequent conversion to a multi-dimensional safearray.</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">VARIANT_dtype = _make_variant_dtype()</span>
+    <span class="s2">except </span><span class="s1">ValueError:</span>
+        <span class="s2">pass</span>
+
+    <span class="s4"># This simplifies dependent modules</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">from </span><span class="s1">numpy </span><span class="s2">import </span><span class="s1">datetime64</span>
+    <span class="s2">except </span><span class="s1">ImportError:</span>
+        <span class="s2">pass</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s4"># This does not work on numpy 1.6</span>
+            <span class="s1">com_null_date64 = datetime64(</span><span class="s5">&quot;1899-12-30T00:00:00&quot;</span><span class="s2">, </span><span class="s5">&quot;ns&quot;</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">TypeError:</span>
+            <span class="s2">pass</span>
+</pre>
+</body>
+</html>

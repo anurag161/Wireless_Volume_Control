@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>test_QueryService.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_QueryService.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">POINTER</span>
+<span class="s0">import </span><span class="s1">comtypes</span>
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span><span class="s0">, </span><span class="s1">GetModule</span>
+
+<span class="s1">GetModule(</span><span class="s2">'oleacc.dll'</span><span class="s1">)</span>
+<span class="s0">from </span><span class="s1">comtypes.gen.Accessibility </span><span class="s0">import </span><span class="s1">IAccessible</span>
+
+<span class="s1">@unittest.skip(</span><span class="s2">&quot;This IE test is not working.  We need to move it to using some other win32 API.&quot;</span><span class="s1">)</span>
+<span class="s0">class </span><span class="s1">TestCase(unittest.TestCase):</span>
+
+    <span class="s0">def </span><span class="s1">setUp(self):</span>
+        <span class="s1">self.ie = CreateObject(</span><span class="s2">'InternetExplorer.application'</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s1">self.ie.Quit()</span>
+        <span class="s0">del </span><span class="s1">self.ie</span>
+
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s1">ie = self.ie</span>
+        <span class="s1">ie.navigate2(</span><span class="s2">&quot;about:blank&quot;</span><span class="s0">, </span><span class="s3">0</span><span class="s1">)</span>
+        <span class="s1">sp = ie.Document.Body.QueryInterface(comtypes.IServiceProvider)</span>
+        <span class="s1">pacc = sp.QueryService(IAccessible._iid_</span><span class="s0">, </span><span class="s1">IAccessible)</span>
+        <span class="s1">self.assertEqual(type(pacc)</span><span class="s0">, </span><span class="s1">POINTER(IAccessible))</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<html>
+<head>
+<title>_psposix.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_psposix.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;Routines common to all posix systems.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">glob</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">signal</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">import </span><span class="s1">time</span>
+
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">MACOS</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">TimeoutExpired</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">memoize</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">sdiskusage</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">usage_percent</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">PY3</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">ChildProcessError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">FileNotFoundError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">InterruptedError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">PermissionError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">ProcessLookupError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">unicode</span>
+
+
+<span class="s3">if </span><span class="s1">MACOS:</span>
+    <span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">_psutil_osx</span>
+
+
+<span class="s3">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s4">3</span><span class="s3">, </span><span class="s4">4</span><span class="s1">):</span>
+    <span class="s3">import </span><span class="s1">enum</span>
+<span class="s3">else</span><span class="s1">:</span>
+    <span class="s1">enum = </span><span class="s3">None</span>
+
+
+<span class="s1">__all__ = [</span><span class="s5">'pid_exists'</span><span class="s3">, </span><span class="s5">'wait_pid'</span><span class="s3">, </span><span class="s5">'disk_usage'</span><span class="s3">, </span><span class="s5">'get_terminal_map'</span><span class="s1">]</span>
+
+
+<span class="s3">def </span><span class="s1">pid_exists(pid):</span>
+    <span class="s2">&quot;&quot;&quot;Check whether pid exists in the current process table.&quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">pid == </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s0"># According to &quot;man 2 kill&quot; PID 0 has a special meaning:</span>
+        <span class="s0"># it refers to &lt;&lt;every process in the process group of the</span>
+        <span class="s0"># calling process&gt;&gt; so we don't want to go any further.</span>
+        <span class="s0"># If we get here it means this UNIX platform *does* have</span>
+        <span class="s0"># a process with id 0.</span>
+        <span class="s3">return True</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">os.kill(pid</span><span class="s3">, </span><span class="s4">0</span><span class="s1">)</span>
+    <span class="s3">except </span><span class="s1">ProcessLookupError:</span>
+        <span class="s3">return False</span>
+    <span class="s3">except </span><span class="s1">PermissionError:</span>
+        <span class="s0"># EPERM clearly means there's a process to deny access to</span>
+        <span class="s3">return True</span>
+    <span class="s0"># According to &quot;man 2 kill&quot; possible error values are</span>
+    <span class="s0"># (EINVAL, EPERM, ESRCH)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">return True</span>
+
+
+<span class="s0"># Python 3.5 signals enum (contributed by me ^^):</span>
+<span class="s0"># https://bugs.python.org/issue21076</span>
+<span class="s3">if </span><span class="s1">enum </span><span class="s3">is not None and </span><span class="s1">hasattr(signal</span><span class="s3">, </span><span class="s5">&quot;Signals&quot;</span><span class="s1">):</span>
+    <span class="s1">Negsignal = enum.IntEnum(</span>
+        <span class="s5">'Negsignal'</span><span class="s3">, </span><span class="s1">dict([(x.name</span><span class="s3">, </span><span class="s1">-x.value) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">signal.Signals]))</span>
+
+    <span class="s3">def </span><span class="s1">negsig_to_enum(num):</span>
+        <span class="s2">&quot;&quot;&quot;Convert a negative signal value to an enum.&quot;&quot;&quot;</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">Negsignal(num)</span>
+        <span class="s3">except </span><span class="s1">ValueError:</span>
+            <span class="s3">return </span><span class="s1">num</span>
+<span class="s3">else</span><span class="s1">:  </span><span class="s0"># pragma: no cover</span>
+    <span class="s3">def </span><span class="s1">negsig_to_enum(num):</span>
+        <span class="s3">return </span><span class="s1">num</span>
+
+
+<span class="s3">def </span><span class="s1">wait_pid(pid</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s3">None, </span><span class="s1">proc_name=</span><span class="s3">None,</span>
+             <span class="s1">_waitpid=os.waitpid</span><span class="s3">,</span>
+             <span class="s1">_timer=getattr(time</span><span class="s3">, </span><span class="s5">'monotonic'</span><span class="s3">, </span><span class="s1">time.time)</span><span class="s3">,</span>
+             <span class="s1">_min=min</span><span class="s3">,</span>
+             <span class="s1">_sleep=time.sleep</span><span class="s3">,</span>
+             <span class="s1">_pid_exists=pid_exists):</span>
+    <span class="s2">&quot;&quot;&quot;Wait for a process PID to terminate. 
+ 
+    If the process terminated normally by calling exit(3) or _exit(2), 
+    or by returning from main(), the return value is the positive integer 
+    passed to *exit(). 
+ 
+    If it was terminated by a signal it returns the negated value of the 
+    signal which caused the termination (e.g. -SIGTERM). 
+ 
+    If PID is not a children of os.getpid() (current process) just 
+    wait until the process disappears and return None. 
+ 
+    If PID does not exist at all return None immediately. 
+ 
+    If *timeout* != None and process is still alive raise TimeoutExpired. 
+    timeout=0 is also possible (either return immediately or raise). 
+    &quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">pid &lt;= </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s5">&quot;can't wait for PID 0&quot;</span><span class="s1">)  </span><span class="s0"># see &quot;man waitpid&quot;</span>
+    <span class="s1">interval = </span><span class="s4">0.0001</span>
+    <span class="s1">flags = </span><span class="s4">0</span>
+    <span class="s3">if </span><span class="s1">timeout </span><span class="s3">is not None</span><span class="s1">:</span>
+        <span class="s1">flags |= os.WNOHANG</span>
+        <span class="s1">stop_at = _timer() + timeout</span>
+
+    <span class="s3">def </span><span class="s1">sleep(interval):</span>
+        <span class="s0"># Sleep for some time and return a new increased interval.</span>
+        <span class="s3">if </span><span class="s1">timeout </span><span class="s3">is not None</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">_timer() &gt;= stop_at:</span>
+                <span class="s3">raise </span><span class="s1">TimeoutExpired(timeout</span><span class="s3">, </span><span class="s1">pid=pid</span><span class="s3">, </span><span class="s1">name=proc_name)</span>
+        <span class="s1">_sleep(interval)</span>
+        <span class="s3">return </span><span class="s1">_min(interval * </span><span class="s4">2</span><span class="s3">, </span><span class="s4">0.04</span><span class="s1">)</span>
+
+    <span class="s0"># See: https://linux.die.net/man/2/waitpid</span>
+    <span class="s3">while True</span><span class="s1">:</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">retpid</span><span class="s3">, </span><span class="s1">status = os.waitpid(pid</span><span class="s3">, </span><span class="s1">flags)</span>
+        <span class="s3">except </span><span class="s1">InterruptedError:</span>
+            <span class="s1">interval = sleep(interval)</span>
+        <span class="s3">except </span><span class="s1">ChildProcessError:</span>
+            <span class="s0"># This has two meanings:</span>
+            <span class="s0"># - PID is not a child of os.getpid() in which case</span>
+            <span class="s0">#   we keep polling until it's gone</span>
+            <span class="s0"># - PID never existed in the first place</span>
+            <span class="s0"># In both cases we'll eventually return None as we</span>
+            <span class="s0"># can't determine its exit status code.</span>
+            <span class="s3">while </span><span class="s1">_pid_exists(pid):</span>
+                <span class="s1">interval = sleep(interval)</span>
+            <span class="s3">return</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">retpid == </span><span class="s4">0</span><span class="s1">:</span>
+                <span class="s0"># WNOHANG flag was used and PID is still running.</span>
+                <span class="s1">interval = sleep(interval)</span>
+                <span class="s3">continue</span>
+            <span class="s3">elif </span><span class="s1">os.WIFEXITED(status):</span>
+                <span class="s0"># Process terminated normally by calling exit(3) or _exit(2),</span>
+                <span class="s0"># or by returning from main(). The return value is the</span>
+                <span class="s0"># positive integer passed to *exit().</span>
+                <span class="s3">return </span><span class="s1">os.WEXITSTATUS(status)</span>
+            <span class="s3">elif </span><span class="s1">os.WIFSIGNALED(status):</span>
+                <span class="s0"># Process exited due to a signal. Return the negative value</span>
+                <span class="s0"># of that signal.</span>
+                <span class="s3">return </span><span class="s1">negsig_to_enum(-os.WTERMSIG(status))</span>
+            <span class="s0"># elif os.WIFSTOPPED(status):</span>
+            <span class="s0">#     # Process was stopped via SIGSTOP or is being traced, and</span>
+            <span class="s0">#     # waitpid() was called with WUNTRACED flag. PID is still</span>
+            <span class="s0">#     # alive. From now on waitpid() will keep returning (0, 0)</span>
+            <span class="s0">#     # until the process state doesn't change.</span>
+            <span class="s0">#     # It may make sense to catch/enable this since stopped PIDs</span>
+            <span class="s0">#     # ignore SIGTERM.</span>
+            <span class="s0">#     interval = sleep(interval)</span>
+            <span class="s0">#     continue</span>
+            <span class="s0"># elif os.WIFCONTINUED(status):</span>
+            <span class="s0">#     # Process was resumed via SIGCONT and waitpid() was called</span>
+            <span class="s0">#     # with WCONTINUED flag.</span>
+            <span class="s0">#     interval = sleep(interval)</span>
+            <span class="s0">#     continue</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s0"># Should never happen.</span>
+                <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s5">&quot;unknown process exit status %r&quot; </span><span class="s1">% status)</span>
+
+
+<span class="s3">def </span><span class="s1">disk_usage(path):</span>
+    <span class="s2">&quot;&quot;&quot;Return disk usage associated with path. 
+    Note: UNIX usually reserves 5% disk space which is not accessible 
+    by user. In this function &quot;total&quot; and &quot;used&quot; values reflect the 
+    total and used disk space whereas &quot;free&quot; and &quot;percent&quot; represent 
+    the &quot;free&quot; and &quot;used percent&quot; user disk space. 
+    &quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">PY3:</span>
+        <span class="s1">st = os.statvfs(path)</span>
+    <span class="s3">else</span><span class="s1">:  </span><span class="s0"># pragma: no cover</span>
+        <span class="s0"># os.statvfs() does not support unicode on Python 2:</span>
+        <span class="s0"># - https://github.com/giampaolo/psutil/issues/416</span>
+        <span class="s0"># - http://bugs.python.org/issue18695</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">st = os.statvfs(path)</span>
+        <span class="s3">except </span><span class="s1">UnicodeEncodeError:</span>
+            <span class="s3">if </span><span class="s1">isinstance(path</span><span class="s3">, </span><span class="s1">unicode):</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s1">path = path.encode(sys.getfilesystemencoding())</span>
+                <span class="s3">except </span><span class="s1">UnicodeEncodeError:</span>
+                    <span class="s3">pass</span>
+                <span class="s1">st = os.statvfs(path)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise</span>
+
+    <span class="s0"># Total space which is only available to root (unless changed</span>
+    <span class="s0"># at system level).</span>
+    <span class="s1">total = (st.f_blocks * st.f_frsize)</span>
+    <span class="s0"># Remaining free space usable by root.</span>
+    <span class="s1">avail_to_root = (st.f_bfree * st.f_frsize)</span>
+    <span class="s0"># Remaining free space usable by user.</span>
+    <span class="s1">avail_to_user = (st.f_bavail * st.f_frsize)</span>
+    <span class="s0"># Total space being used in general.</span>
+    <span class="s1">used = (total - avail_to_root)</span>
+    <span class="s3">if </span><span class="s1">MACOS:</span>
+        <span class="s0"># see: https://github.com/giampaolo/psutil/pull/2152</span>
+        <span class="s1">used = _psutil_osx.disk_usage_used(path</span><span class="s3">, </span><span class="s1">used)</span>
+    <span class="s0"># Total space which is available to user (same as 'total' but</span>
+    <span class="s0"># for the user).</span>
+    <span class="s1">total_user = used + avail_to_user</span>
+    <span class="s0"># User usage percent compared to the total amount of space</span>
+    <span class="s0"># the user can use. This number would be higher if compared</span>
+    <span class="s0"># to root's because the user has less space (usually -5%).</span>
+    <span class="s1">usage_percent_user = usage_percent(used</span><span class="s3">, </span><span class="s1">total_user</span><span class="s3">, </span><span class="s1">round_=</span><span class="s4">1</span><span class="s1">)</span>
+
+    <span class="s0"># NB: the percentage is -5% than what shown by df due to</span>
+    <span class="s0"># reserved blocks that we are currently not considering:</span>
+    <span class="s0"># https://github.com/giampaolo/psutil/issues/829#issuecomment-223750462</span>
+    <span class="s3">return </span><span class="s1">sdiskusage(</span>
+        <span class="s1">total=total</span><span class="s3">, </span><span class="s1">used=used</span><span class="s3">, </span><span class="s1">free=avail_to_user</span><span class="s3">, </span><span class="s1">percent=usage_percent_user)</span>
+
+
+<span class="s1">@memoize</span>
+<span class="s3">def </span><span class="s1">get_terminal_map():</span>
+    <span class="s2">&quot;&quot;&quot;Get a map of device-id -&gt; path as a dict. 
+    Used by Process.terminal() 
+    &quot;&quot;&quot;</span>
+    <span class="s1">ret = {}</span>
+    <span class="s1">ls = glob.glob(</span><span class="s5">'/dev/tty*'</span><span class="s1">) + glob.glob(</span><span class="s5">'/dev/pts/*'</span><span class="s1">)</span>
+    <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">ls:</span>
+        <span class="s3">assert </span><span class="s1">name </span><span class="s3">not in </span><span class="s1">ret</span><span class="s3">, </span><span class="s1">name</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">ret[os.stat(name).st_rdev] = name</span>
+        <span class="s3">except </span><span class="s1">FileNotFoundError:</span>
+            <span class="s3">pass</span>
+    <span class="s3">return </span><span class="s1">ret</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<html>
+<head>
+<title>test_outparam.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_outparam.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s0">import </span><span class="s1">comtypes.test</span>
+
+<span class="s1">comtypes.test.requires(</span><span class="s2">&quot;devel&quot;</span><span class="s1">)</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IUnknown</span><span class="s0">, </span><span class="s1">GUID</span><span class="s0">, </span><span class="s1">COMMETHOD</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s0">, </span><span class="s3">0</span><span class="s1">):</span>
+    <span class="s1">text_type = str</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">text_type = unicode</span>
+
+<span class="s0">class </span><span class="s1">IMalloc(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s2">&quot;{00000002-0000-0000-C000-000000000046}&quot;</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;Alloc&quot;</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_ulong</span><span class="s0">, </span><span class="s2">&quot;cb&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;Realloc&quot;</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;pv&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_ulong</span><span class="s0">, </span><span class="s2">&quot;cb&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, None, </span><span class="s2">&quot;Free&quot;</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;py&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">c_ulong</span><span class="s0">, </span><span class="s2">&quot;GetSize&quot;</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;pv&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s2">&quot;DidAlloc&quot;</span><span class="s0">,</span>
+                  <span class="s1">([]</span><span class="s0">, </span><span class="s1">c_void_p</span><span class="s0">, </span><span class="s2">&quot;pv&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, None, </span><span class="s2">&quot;HeapMinimize&quot;</span><span class="s1">) </span><span class="s4"># 25</span>
+        <span class="s1">]</span>
+
+<span class="s1">malloc = POINTER(IMalloc)()</span>
+<span class="s1">oledll.ole32.CoGetMalloc(</span><span class="s3">1</span><span class="s0">, </span><span class="s1">byref(malloc))</span>
+<span class="s0">assert </span><span class="s1">bool(malloc)</span>
+
+<span class="s0">def </span><span class="s1">from_outparm(self):</span>
+    <span class="s0">if not </span><span class="s1">self:</span>
+        <span class="s0">return None</span>
+    <span class="s1">result = wstring_at(self)</span>
+    <span class="s0">if not </span><span class="s1">malloc.DidAlloc(self):</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;memory was NOT allocated by CoTaskMemAlloc&quot;</span><span class="s1">)</span>
+    <span class="s1">windll.ole32.CoTaskMemFree(self)</span>
+    <span class="s0">return </span><span class="s1">result</span>
+<span class="s1">c_wchar_p.__ctypes_from_outparam__ = from_outparm</span>
+
+<span class="s0">def </span><span class="s1">comstring(text</span><span class="s0">, </span><span class="s1">typ=c_wchar_p):</span>
+    <span class="s1">text = text_type(text)</span>
+    <span class="s1">size = (len(text) + </span><span class="s3">1</span><span class="s1">) * sizeof(c_wchar)</span>
+    <span class="s1">mem = windll.ole32.CoTaskMemAlloc(size)</span>
+    <span class="s1">print(</span><span class="s2">&quot;malloc'd 0x%x, %d bytes&quot; </span><span class="s1">% (mem</span><span class="s0">, </span><span class="s1">size))</span>
+    <span class="s1">ptr = cast(mem</span><span class="s0">, </span><span class="s1">typ)</span>
+    <span class="s1">memmove(mem</span><span class="s0">, </span><span class="s1">text</span><span class="s0">, </span><span class="s1">size)</span>
+    <span class="s0">return </span><span class="s1">ptr</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s1">@unittest.skip(</span><span class="s2">&quot;This fails for reasons I don't understand yet&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_c_char(self):</span>
+<span class="s4">##        ptr = c_wchar_p(&quot;abc&quot;)</span>
+<span class="s4">##        self.failUnlessEqual(ptr.__ctypes_from_outparam__(),</span>
+<span class="s4">##                             &quot;abc&quot;)</span>
+
+<span class="s4">##        p = BSTR(&quot;foo bar spam&quot;)</span>
+
+        <span class="s1">x = comstring(</span><span class="s2">&quot;Hello, World&quot;</span><span class="s1">)</span>
+        <span class="s1">y = comstring(</span><span class="s2">&quot;foo bar&quot;</span><span class="s1">)</span>
+        <span class="s1">z = comstring(</span><span class="s2">&quot;spam, spam, and spam&quot;</span><span class="s1">)</span>
+
+<span class="s4">##        (x.__ctypes_from_outparam__(), x.__ctypes_from_outparam__())</span>
+        <span class="s1">print((x.__ctypes_from_outparam__()</span><span class="s0">, None</span><span class="s1">)) </span><span class="s4">#x.__ctypes_from_outparam__())</span>
+
+<span class="s4">##        print comstring(&quot;Hello, World&quot;, c_wchar_p).__ctypes_from_outparam__()</span>
+<span class="s4">##        print comstring(&quot;Hello, World&quot;, c_wchar_p).__ctypes_from_outparam__()</span>
+<span class="s4">##        print comstring(&quot;Hello, World&quot;, c_wchar_p).__ctypes_from_outparam__()</span>
+<span class="s4">##        print comstring(&quot;Hello, World&quot;, c_wchar_p).__ctypes_from_outparam__()</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

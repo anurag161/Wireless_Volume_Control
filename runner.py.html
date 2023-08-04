@@ -1,0 +1,372 @@
+<html>
+<head>
+<title>runner.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+runner.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot; 
+Unit test runner, providing new features on top of unittest module: 
+- colourized output 
+- parallel run (UNIX only) 
+- print failures/tracebacks on CTRL+C 
+- re-run failed tests only (make test-failed) 
+ 
+Invocation examples: 
+- make test 
+- make test-failed 
+ 
+Parallel: 
+- make test-parallel 
+- make test-process ARGS=--parallel 
+&quot;&quot;&quot;</span>
+
+<span class="s3">from </span><span class="s1">__future__ </span><span class="s3">import </span><span class="s1">print_function</span>
+
+<span class="s3">import </span><span class="s1">atexit</span>
+<span class="s3">import </span><span class="s1">optparse</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">import </span><span class="s1">textwrap</span>
+<span class="s3">import </span><span class="s1">time</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+
+
+<span class="s3">try</span><span class="s1">:</span>
+    <span class="s3">import </span><span class="s1">ctypes</span>
+<span class="s3">except </span><span class="s1">ImportError:</span>
+    <span class="s1">ctypes = </span><span class="s3">None</span>
+
+<span class="s3">try</span><span class="s1">:</span>
+    <span class="s3">import </span><span class="s1">concurrencytest  </span><span class="s0"># pip install concurrencytest</span>
+<span class="s3">except </span><span class="s1">ImportError:</span>
+    <span class="s1">concurrencytest = </span><span class="s3">None</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">hilite</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">print_color</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">term_supports_colors</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">super</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">CI_TESTING</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">import_module_by_path</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">print_sysinfo</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">reap_children</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_rmpath</span>
+
+
+<span class="s1">VERBOSITY = </span><span class="s4">2</span>
+<span class="s1">FAILED_TESTS_FNAME = </span><span class="s5">'.failed-tests.txt'</span>
+<span class="s1">NWORKERS = psutil.cpu_count() </span><span class="s3">or </span><span class="s4">1</span>
+<span class="s1">USE_COLORS = </span><span class="s3">not </span><span class="s1">CI_TESTING </span><span class="s3">and </span><span class="s1">term_supports_colors()</span>
+
+<span class="s1">HERE = os.path.abspath(os.path.dirname(__file__))</span>
+<span class="s1">loadTestsFromTestCase = unittest.defaultTestLoader.loadTestsFromTestCase</span>
+
+
+<span class="s3">def </span><span class="s1">cprint(msg</span><span class="s3">, </span><span class="s1">color</span><span class="s3">, </span><span class="s1">bold=</span><span class="s3">False, </span><span class="s1">file=</span><span class="s3">None</span><span class="s1">):</span>
+    <span class="s3">if </span><span class="s1">file </span><span class="s3">is None</span><span class="s1">:</span>
+        <span class="s1">file = sys.stderr </span><span class="s3">if </span><span class="s1">color == </span><span class="s5">'red' </span><span class="s3">else </span><span class="s1">sys.stdout</span>
+    <span class="s3">if </span><span class="s1">USE_COLORS:</span>
+        <span class="s1">print_color(msg</span><span class="s3">, </span><span class="s1">color</span><span class="s3">, </span><span class="s1">bold=bold</span><span class="s3">, </span><span class="s1">file=file)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">print(msg</span><span class="s3">, </span><span class="s1">file=file)</span>
+
+
+<span class="s3">class </span><span class="s1">TestLoader:</span>
+
+    <span class="s1">testdir = HERE</span>
+    <span class="s1">skip_files = [</span><span class="s5">'test_memleaks.py'</span><span class="s1">]</span>
+    <span class="s3">if </span><span class="s5">&quot;WHEELHOUSE_UPLOADER_USERNAME&quot; </span><span class="s3">in </span><span class="s1">os.environ:</span>
+        <span class="s1">skip_files.extend([</span><span class="s5">'test_osx.py'</span><span class="s3">, </span><span class="s5">'test_linux.py'</span><span class="s3">, </span><span class="s5">'test_posix.py'</span><span class="s1">])</span>
+
+    <span class="s3">def </span><span class="s1">_get_testmods(self):</span>
+        <span class="s3">return </span><span class="s1">[os.path.join(self.testdir</span><span class="s3">, </span><span class="s1">x)</span>
+                <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">os.listdir(self.testdir)</span>
+                <span class="s3">if </span><span class="s1">x.startswith(</span><span class="s5">'test_'</span><span class="s1">) </span><span class="s3">and </span><span class="s1">x.endswith(</span><span class="s5">'.py'</span><span class="s1">) </span><span class="s3">and</span>
+                <span class="s1">x </span><span class="s3">not in </span><span class="s1">self.skip_files]</span>
+
+    <span class="s3">def </span><span class="s1">_iter_testmod_classes(self):</span>
+        <span class="s2">&quot;&quot;&quot;Iterate over all test files in this directory and return 
+        all TestCase classes in them. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">for </span><span class="s1">path </span><span class="s3">in </span><span class="s1">self._get_testmods():</span>
+            <span class="s1">mod = import_module_by_path(path)</span>
+            <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">dir(mod):</span>
+                <span class="s1">obj = getattr(mod</span><span class="s3">, </span><span class="s1">name)</span>
+                <span class="s3">if </span><span class="s1">isinstance(obj</span><span class="s3">, </span><span class="s1">type) </span><span class="s3">and </span><span class="s1">\</span>
+                        <span class="s1">issubclass(obj</span><span class="s3">, </span><span class="s1">unittest.TestCase):</span>
+                    <span class="s3">yield </span><span class="s1">obj</span>
+
+    <span class="s3">def </span><span class="s1">all(self):</span>
+        <span class="s1">suite = unittest.TestSuite()</span>
+        <span class="s3">for </span><span class="s1">obj </span><span class="s3">in </span><span class="s1">self._iter_testmod_classes():</span>
+            <span class="s1">test = loadTestsFromTestCase(obj)</span>
+            <span class="s1">suite.addTest(test)</span>
+        <span class="s3">return </span><span class="s1">suite</span>
+
+    <span class="s3">def </span><span class="s1">last_failed(self):</span>
+        <span class="s0"># ...from previously failed test run</span>
+        <span class="s1">suite = unittest.TestSuite()</span>
+        <span class="s3">if not </span><span class="s1">os.path.isfile(FAILED_TESTS_FNAME):</span>
+            <span class="s3">return </span><span class="s1">suite</span>
+        <span class="s3">with </span><span class="s1">open(FAILED_TESTS_FNAME</span><span class="s3">, </span><span class="s5">'rt'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s1">names = f.read().split()</span>
+        <span class="s3">for </span><span class="s1">n </span><span class="s3">in </span><span class="s1">names:</span>
+            <span class="s1">test = unittest.defaultTestLoader.loadTestsFromName(n)</span>
+            <span class="s1">suite.addTest(test)</span>
+        <span class="s3">return </span><span class="s1">suite</span>
+
+    <span class="s3">def </span><span class="s1">from_name(self</span><span class="s3">, </span><span class="s1">name):</span>
+        <span class="s3">if </span><span class="s1">name.endswith(</span><span class="s5">'.py'</span><span class="s1">):</span>
+            <span class="s1">name = os.path.splitext(os.path.basename(name))[</span><span class="s4">0</span><span class="s1">]</span>
+        <span class="s3">return </span><span class="s1">unittest.defaultTestLoader.loadTestsFromName(name)</span>
+
+
+<span class="s3">class </span><span class="s1">ColouredResult(unittest.TextTestResult):</span>
+
+    <span class="s3">def </span><span class="s1">addSuccess(self</span><span class="s3">, </span><span class="s1">test):</span>
+        <span class="s1">unittest.TestResult.addSuccess(self</span><span class="s3">, </span><span class="s1">test)</span>
+        <span class="s1">cprint(</span><span class="s5">&quot;OK&quot;</span><span class="s3">, </span><span class="s5">&quot;green&quot;</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">addError(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">err):</span>
+        <span class="s1">unittest.TestResult.addError(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">err)</span>
+        <span class="s1">cprint(</span><span class="s5">&quot;ERROR&quot;</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s3">, </span><span class="s1">bold=</span><span class="s3">True</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">addFailure(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">err):</span>
+        <span class="s1">unittest.TestResult.addFailure(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">err)</span>
+        <span class="s1">cprint(</span><span class="s5">&quot;FAIL&quot;</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">addSkip(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">reason):</span>
+        <span class="s1">unittest.TestResult.addSkip(self</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">reason)</span>
+        <span class="s1">cprint(</span><span class="s5">&quot;skipped: %s&quot; </span><span class="s1">% reason.strip()</span><span class="s3">, </span><span class="s5">&quot;brown&quot;</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">printErrorList(self</span><span class="s3">, </span><span class="s1">flavour</span><span class="s3">, </span><span class="s1">errors):</span>
+        <span class="s1">flavour = hilite(flavour</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s3">, </span><span class="s1">bold=flavour == </span><span class="s5">'ERROR'</span><span class="s1">)</span>
+        <span class="s1">super().printErrorList(flavour</span><span class="s3">, </span><span class="s1">errors)</span>
+
+
+<span class="s3">class </span><span class="s1">ColouredTextRunner(unittest.TextTestRunner):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    A coloured text runner which also prints failed tests on KeyboardInterrupt 
+    and save failed tests in a file so that they can be re-run. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">resultclass = ColouredResult </span><span class="s3">if </span><span class="s1">USE_COLORS </span><span class="s3">else </span><span class="s1">unittest.TextTestResult</span>
+
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">*args</span><span class="s3">, </span><span class="s1">**kwargs):</span>
+        <span class="s1">super().__init__(*args</span><span class="s3">, </span><span class="s1">**kwargs)</span>
+        <span class="s1">self.failed_tnames = set()</span>
+
+    <span class="s3">def </span><span class="s1">_makeResult(self):</span>
+        <span class="s0"># Store result instance so that it can be accessed on</span>
+        <span class="s0"># KeyboardInterrupt.</span>
+        <span class="s1">self.result = super()._makeResult()</span>
+        <span class="s3">return </span><span class="s1">self.result</span>
+
+    <span class="s3">def </span><span class="s1">_write_last_failed(self):</span>
+        <span class="s3">if </span><span class="s1">self.failed_tnames:</span>
+            <span class="s3">with </span><span class="s1">open(FAILED_TESTS_FNAME</span><span class="s3">, </span><span class="s5">'wt'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+                <span class="s3">for </span><span class="s1">tname </span><span class="s3">in </span><span class="s1">self.failed_tnames:</span>
+                    <span class="s1">f.write(tname + </span><span class="s5">'</span><span class="s3">\n</span><span class="s5">'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">_save_result(self</span><span class="s3">, </span><span class="s1">result):</span>
+        <span class="s3">if not </span><span class="s1">result.wasSuccessful():</span>
+            <span class="s3">for </span><span class="s1">t </span><span class="s3">in </span><span class="s1">result.errors + result.failures:</span>
+                <span class="s1">tname = t[</span><span class="s4">0</span><span class="s1">].id()</span>
+                <span class="s1">self.failed_tnames.add(tname)</span>
+
+    <span class="s3">def </span><span class="s1">_run(self</span><span class="s3">, </span><span class="s1">suite):</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">result = super().run(suite)</span>
+        <span class="s3">except </span><span class="s1">(KeyboardInterrupt</span><span class="s3">, </span><span class="s1">SystemExit):</span>
+            <span class="s1">result = self.runner.result</span>
+            <span class="s1">result.printErrors()</span>
+            <span class="s3">raise </span><span class="s1">sys.exit(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self._save_result(result)</span>
+            <span class="s3">return </span><span class="s1">result</span>
+
+    <span class="s3">def </span><span class="s1">_exit(self</span><span class="s3">, </span><span class="s1">success):</span>
+        <span class="s3">if </span><span class="s1">success:</span>
+            <span class="s1">cprint(</span><span class="s5">&quot;SUCCESS&quot;</span><span class="s3">, </span><span class="s5">&quot;green&quot;</span><span class="s3">, </span><span class="s1">bold=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s1">safe_rmpath(FAILED_TESTS_FNAME)</span>
+            <span class="s1">sys.exit(</span><span class="s4">0</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">cprint(</span><span class="s5">&quot;FAILED&quot;</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s3">, </span><span class="s1">bold=</span><span class="s3">True</span><span class="s1">)</span>
+            <span class="s1">self._write_last_failed()</span>
+            <span class="s1">sys.exit(</span><span class="s4">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">run(self</span><span class="s3">, </span><span class="s1">suite):</span>
+        <span class="s1">result = self._run(suite)</span>
+        <span class="s1">self._exit(result.wasSuccessful())</span>
+
+
+<span class="s3">class </span><span class="s1">ParallelRunner(ColouredTextRunner):</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_parallelize(suite):</span>
+        <span class="s3">def </span><span class="s1">fdopen(fd</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">, </span><span class="s1">*kwds):</span>
+            <span class="s1">stream = orig_fdopen(fd</span><span class="s3">, </span><span class="s1">mode)</span>
+            <span class="s1">atexit.register(stream.close)</span>
+            <span class="s3">return </span><span class="s1">stream</span>
+
+        <span class="s0"># Monkey patch concurrencytest lib bug (fdopen() stream not closed).</span>
+        <span class="s0"># https://github.com/cgoldberg/concurrencytest/issues/11</span>
+        <span class="s1">orig_fdopen = os.fdopen</span>
+        <span class="s1">concurrencytest.os.fdopen = fdopen</span>
+        <span class="s1">forker = concurrencytest.fork_for_tests(NWORKERS)</span>
+        <span class="s3">return </span><span class="s1">concurrencytest.ConcurrentTestSuite(suite</span><span class="s3">, </span><span class="s1">forker)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_split_suite(suite):</span>
+        <span class="s1">serial = unittest.TestSuite()</span>
+        <span class="s1">parallel = unittest.TestSuite()</span>
+        <span class="s3">for </span><span class="s1">test </span><span class="s3">in </span><span class="s1">suite:</span>
+            <span class="s3">if </span><span class="s1">test.countTestCases() == </span><span class="s4">0</span><span class="s1">:</span>
+                <span class="s3">continue</span>
+            <span class="s3">elif </span><span class="s1">isinstance(test</span><span class="s3">, </span><span class="s1">unittest.TestSuite):</span>
+                <span class="s1">test_class = test._tests[</span><span class="s4">0</span><span class="s1">].__class__</span>
+            <span class="s3">elif </span><span class="s1">isinstance(test</span><span class="s3">, </span><span class="s1">unittest.TestCase):</span>
+                <span class="s1">test_class = test</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise </span><span class="s1">TypeError(</span><span class="s5">&quot;can't recognize type %r&quot; </span><span class="s1">% test)</span>
+
+            <span class="s3">if </span><span class="s1">getattr(test_class</span><span class="s3">, </span><span class="s5">'_serialrun'</span><span class="s3">, False</span><span class="s1">):</span>
+                <span class="s1">serial.addTest(test)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">parallel.addTest(test)</span>
+        <span class="s3">return </span><span class="s1">(serial</span><span class="s3">, </span><span class="s1">parallel)</span>
+
+    <span class="s3">def </span><span class="s1">run(self</span><span class="s3">, </span><span class="s1">suite):</span>
+        <span class="s1">ser_suite</span><span class="s3">, </span><span class="s1">par_suite = self._split_suite(suite)</span>
+        <span class="s1">par_suite = self._parallelize(par_suite)</span>
+
+        <span class="s0"># run parallel</span>
+        <span class="s1">cprint(</span><span class="s5">&quot;starting parallel tests using %s workers&quot; </span><span class="s1">% NWORKERS</span><span class="s3">,</span>
+               <span class="s5">&quot;green&quot;</span><span class="s3">, </span><span class="s1">bold=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">t = time.time()</span>
+        <span class="s1">par = self._run(par_suite)</span>
+        <span class="s1">par_elapsed = time.time() - t</span>
+
+        <span class="s0"># At this point we should have N zombies (the workers), which</span>
+        <span class="s0"># will disappear with wait().</span>
+        <span class="s1">orphans = psutil.Process().children()</span>
+        <span class="s1">gone</span><span class="s3">, </span><span class="s1">alive = psutil.wait_procs(orphans</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">alive:</span>
+            <span class="s1">cprint(</span><span class="s5">&quot;alive processes %s&quot; </span><span class="s1">% alive</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s1">)</span>
+            <span class="s1">reap_children()</span>
+
+        <span class="s0"># run serial</span>
+        <span class="s1">t = time.time()</span>
+        <span class="s1">ser = self._run(ser_suite)</span>
+        <span class="s1">ser_elapsed = time.time() - t</span>
+
+        <span class="s0"># print</span>
+        <span class="s3">if not </span><span class="s1">par.wasSuccessful() </span><span class="s3">and </span><span class="s1">ser_suite.countTestCases() &gt; </span><span class="s4">0</span><span class="s1">:</span>
+            <span class="s1">par.printErrors()  </span><span class="s0"># print them again at the bottom</span>
+        <span class="s1">par_fails</span><span class="s3">, </span><span class="s1">par_errs</span><span class="s3">, </span><span class="s1">par_skips = map(len</span><span class="s3">, </span><span class="s1">(par.failures</span><span class="s3">,</span>
+                                                   <span class="s1">par.errors</span><span class="s3">,</span>
+                                                   <span class="s1">par.skipped))</span>
+        <span class="s1">ser_fails</span><span class="s3">, </span><span class="s1">ser_errs</span><span class="s3">, </span><span class="s1">ser_skips = map(len</span><span class="s3">, </span><span class="s1">(ser.failures</span><span class="s3">,</span>
+                                                   <span class="s1">ser.errors</span><span class="s3">,</span>
+                                                   <span class="s1">ser.skipped))</span>
+        <span class="s1">print(textwrap.dedent(</span><span class="s5">&quot;&quot;&quot; 
+            +----------+----------+----------+----------+----------+----------+ 
+            |          |    total | failures |   errors |  skipped |     time | 
+            +----------+----------+----------+----------+----------+----------+ 
+            | parallel |      %3s |      %3s |      %3s |      %3s |    %.2fs | 
+            +----------+----------+----------+----------+----------+----------+ 
+            | serial   |      %3s |      %3s |      %3s |      %3s |    %.2fs | 
+            +----------+----------+----------+----------+----------+----------+ 
+            &quot;&quot;&quot; </span><span class="s1">% (par.testsRun</span><span class="s3">, </span><span class="s1">par_fails</span><span class="s3">, </span><span class="s1">par_errs</span><span class="s3">, </span><span class="s1">par_skips</span><span class="s3">, </span><span class="s1">par_elapsed</span><span class="s3">,</span>
+                   <span class="s1">ser.testsRun</span><span class="s3">, </span><span class="s1">ser_fails</span><span class="s3">, </span><span class="s1">ser_errs</span><span class="s3">, </span><span class="s1">ser_skips</span><span class="s3">, </span><span class="s1">ser_elapsed)))</span>
+        <span class="s1">print(</span><span class="s5">&quot;Ran %s tests in %.3fs using %s workers&quot; </span><span class="s1">% (</span>
+            <span class="s1">par.testsRun + ser.testsRun</span><span class="s3">, </span><span class="s1">par_elapsed + ser_elapsed</span><span class="s3">, </span><span class="s1">NWORKERS))</span>
+        <span class="s1">ok = par.wasSuccessful() </span><span class="s3">and </span><span class="s1">ser.wasSuccessful()</span>
+        <span class="s1">self._exit(ok)</span>
+
+
+<span class="s3">def </span><span class="s1">get_runner(parallel=</span><span class="s3">False</span><span class="s1">):</span>
+    <span class="s3">def </span><span class="s1">warn(msg):</span>
+        <span class="s1">cprint(msg + </span><span class="s5">&quot; Running serial tests instead.&quot;</span><span class="s3">, </span><span class="s5">&quot;red&quot;</span><span class="s1">)</span>
+    <span class="s3">if </span><span class="s1">parallel:</span>
+        <span class="s3">if </span><span class="s1">psutil.WINDOWS:</span>
+            <span class="s1">warn(</span><span class="s5">&quot;Can't run parallel tests on Windows.&quot;</span><span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">concurrencytest </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s1">warn(</span><span class="s5">&quot;concurrencytest module is not installed.&quot;</span><span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">NWORKERS == </span><span class="s4">1</span><span class="s1">:</span>
+            <span class="s1">warn(</span><span class="s5">&quot;Only 1 CPU available.&quot;</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">ParallelRunner(verbosity=VERBOSITY)</span>
+    <span class="s3">return </span><span class="s1">ColouredTextRunner(verbosity=VERBOSITY)</span>
+
+
+<span class="s0"># Used by test_*,py modules.</span>
+<span class="s3">def </span><span class="s1">run_from_name(name):</span>
+    <span class="s3">if </span><span class="s1">CI_TESTING:</span>
+        <span class="s1">print_sysinfo()</span>
+    <span class="s1">suite = TestLoader().from_name(name)</span>
+    <span class="s1">runner = get_runner()</span>
+    <span class="s1">runner.run(suite)</span>
+
+
+<span class="s3">def </span><span class="s1">setup():</span>
+    <span class="s1">psutil._set_debug(</span><span class="s3">True</span><span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">main():</span>
+    <span class="s1">setup()</span>
+    <span class="s1">usage = </span><span class="s5">&quot;python3 -m psutil.tests [opts] [test-name]&quot;</span>
+    <span class="s1">parser = optparse.OptionParser(usage=usage</span><span class="s3">, </span><span class="s1">description=</span><span class="s5">&quot;run unit tests&quot;</span><span class="s1">)</span>
+    <span class="s1">parser.add_option(</span><span class="s5">&quot;--last-failed&quot;</span><span class="s3">,</span>
+                      <span class="s1">action=</span><span class="s5">&quot;store_true&quot;</span><span class="s3">, </span><span class="s1">default=</span><span class="s3">False,</span>
+                      <span class="s1">help=</span><span class="s5">&quot;only run last failed tests&quot;</span><span class="s1">)</span>
+    <span class="s1">parser.add_option(</span><span class="s5">&quot;--parallel&quot;</span><span class="s3">,</span>
+                      <span class="s1">action=</span><span class="s5">&quot;store_true&quot;</span><span class="s3">, </span><span class="s1">default=</span><span class="s3">False,</span>
+                      <span class="s1">help=</span><span class="s5">&quot;run tests in parallel&quot;</span><span class="s1">)</span>
+    <span class="s1">opts</span><span class="s3">, </span><span class="s1">args = parser.parse_args()</span>
+
+    <span class="s3">if not </span><span class="s1">opts.last_failed:</span>
+        <span class="s1">safe_rmpath(FAILED_TESTS_FNAME)</span>
+
+    <span class="s0"># loader</span>
+    <span class="s1">loader = TestLoader()</span>
+    <span class="s3">if </span><span class="s1">args:</span>
+        <span class="s3">if </span><span class="s1">len(args) &gt; </span><span class="s4">1</span><span class="s1">:</span>
+            <span class="s1">parser.print_usage()</span>
+            <span class="s3">return </span><span class="s1">sys.exit(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">suite = loader.from_name(args[</span><span class="s4">0</span><span class="s1">])</span>
+    <span class="s3">elif </span><span class="s1">opts.last_failed:</span>
+        <span class="s1">suite = loader.last_failed()</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">suite = loader.all()</span>
+
+    <span class="s3">if </span><span class="s1">CI_TESTING:</span>
+        <span class="s1">print_sysinfo()</span>
+    <span class="s1">runner = get_runner(opts.parallel)</span>
+    <span class="s1">runner.run(suite)</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s5">'__main__'</span><span class="s1">:</span>
+    <span class="s1">main()</span>
+</pre>
+</body>
+</html>

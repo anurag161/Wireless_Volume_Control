@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>mytypelib.idl</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+.s1 { color: #6a8759;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+mytypelib.idl</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">&quot;oaidl.idl&quot;</span><span class="s0">;</span>
+<span class="s0">import </span><span class="s1">&quot;ocidl.idl&quot;</span><span class="s0">;</span>
+
+<span class="s2">typedef</span>
+<span class="s0">[</span>
+	<span class="s0">uuid(</span><span class="s3">0</span><span class="s0">a411e93-aeb0-4b84-8722-b237a1b87ba1)</span>
+	<span class="s0">]</span>
+<span class="s2">struct </span><span class="s0">Pair {</span>
+	<span class="s2">double </span><span class="s0">a;</span>
+	<span class="s2">double </span><span class="s0">b;</span>
+<span class="s0">} Pair;</span>
+
+<span class="s2">typedef</span>
+<span class="s0">[</span>
+	<span class="s0">uuid(</span><span class="s3">00</span><span class="s0">b7e135-f7a3-42f8-b65b-ecd106b3c17d)</span>
+	<span class="s0">]</span>
+<span class="s2">struct </span><span class="s0">Point {</span>
+	<span class="s2">double </span><span class="s0">x;</span>
+	<span class="s2">double </span><span class="s0">y;</span>
+<span class="s0">} Point;</span>
+
+<span class="s0">[</span>
+	<span class="s0">object,</span>
+	<span class="s4">/* 
+      the oleautomation flag enables universal marshalling on non-dispatch 
+      interfaces. See Don Box, Page 220. 
+    */</span>
+	<span class="s0">oleautomation,</span>
+	<span class="s0">uuid(</span><span class="s3">368</span><span class="s0">ce4db-5f87-4927-b134-2a955c1dea1f),</span>
+	<span class="s0">]</span>
+<span class="s2">interface </span><span class="s0">IMyInterface : IUnknown {</span>
+	<span class="s0">[propget, id(</span><span class="s3">10</span><span class="s0">), helpstring(</span><span class="s1">&quot;returns the id of the server&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT id([</span><span class="s2">out</span><span class="s0">, retval] UINT *pid);</span>
+
+	<span class="s0">[propget, id(</span><span class="s3">11</span><span class="s0">), helpstring(</span><span class="s1">&quot;the name of the server&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT name([</span><span class="s2">out</span><span class="s0">, retval] BSTR *pname);</span>
+
+	<span class="s0">[propput, id(</span><span class="s3">11</span><span class="s0">), helpstring(</span><span class="s1">&quot;the name of the server&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT name([</span><span class="s2">in</span><span class="s0">] BSTR name);</span>
+
+	<span class="s0">[id(</span><span class="s3">12</span><span class="s0">), helpstring(</span><span class="s1">&quot;a method that receives an BSTR [in] parameter&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT SetName([</span><span class="s2">in</span><span class="s0">] BSTR name);</span>
+
+	<span class="s0">[id(</span><span class="s3">13</span><span class="s0">), helpstring(</span><span class="s1">&quot;evaluate an expression and return the result&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT eval([</span><span class="s2">in</span><span class="s0">] BSTR what, [</span><span class="s2">out</span><span class="s0">, retval] VARIANT *presult);</span>
+
+	<span class="s4">/* Some methods that use defaultvalues */</span>
+	<span class="s0">[id(</span><span class="s3">14</span><span class="s0">)]</span>
+	<span class="s0">HRESULT do_cy([</span><span class="s2">in</span><span class="s0">, defaultvalue(</span><span class="s3">32.78</span><span class="s0">)] CURRENCY *value);</span>
+
+	<span class="s0">[id(</span><span class="s3">15</span><span class="s0">)]</span>
+	<span class="s0">HRESULT do_date([</span><span class="s2">in</span><span class="s0">, defaultvalue(</span><span class="s3">32</span><span class="s0">)] DATE *value);</span>
+
+	<span class="s0">[id(</span><span class="s3">16</span><span class="s0">), helpstring(</span><span class="s1">&quot;execute a statement&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT Exec([</span><span class="s2">in</span><span class="s0">] BSTR what);</span>
+
+	<span class="s0">[helpstring(</span><span class="s1">&quot;execute a statement&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT Exec2([</span><span class="s2">in</span><span class="s0">] BSTR what);</span>
+
+	<span class="s0">[helpstring(</span><span class="s1">&quot;a method with [in] and [out] args in mixed order&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT MixedInOut([</span><span class="s2">in</span><span class="s0">] int a, [</span><span class="s2">out</span><span class="s0">] int *b, [</span><span class="s2">in</span><span class="s0">] int c, [</span><span class="s2">out</span><span class="s0">] int *d);</span>
+
+	<span class="s0">[helpstring(</span><span class="s1">&quot;a method that receives and returns SAFEARRAYs of pairs&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT TestPairArray([</span><span class="s2">in</span><span class="s0">] SAFEARRAY(Pair) val, [</span><span class="s2">out</span><span class="s0">, retval] SAFEARRAY(Pair) *result);</span>
+
+	<span class="s0">[helpstring(</span><span class="s1">&quot;a method that receives and returns SAFEARRAYs of pairs&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT TestPairArray2([</span><span class="s2">in</span><span class="s0">] SAFEARRAY(Pair) val, [</span><span class="s2">out</span><span class="s0">, retval] SAFEARRAY(Pair) *result);</span>
+
+	<span class="s0">[helpstring(</span><span class="s1">&quot;a method that receives and returns SAFEARRAYs of points&quot;</span><span class="s0">)]</span>
+	<span class="s0">HRESULT TestPointArray([</span><span class="s2">in</span><span class="s0">] SAFEARRAY(Point) val, [</span><span class="s2">out</span><span class="s0">, retval] SAFEARRAY(Point) *result);</span>
+
+	<span class="s0">[local, helpstring(</span><span class="s1">&quot;...&quot;</span><span class="s0">)]</span>
+	<span class="s0">LONG Test([</span><span class="s2">in</span><span class="s0">] int value, [</span><span class="s2">out</span><span class="s0">, retval] int *result);</span>
+
+	<span class="s0">HRESULT MultiInOutArgs([</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pa,</span>
+			       <span class="s0">[</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pb,</span>
+			       <span class="s0">[</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pc);</span>
+
+	<span class="s0">HRESULT MultiOutArgs2([</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pa,</span>
+			      <span class="s0">[</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pb,</span>
+			      <span class="s0">[</span><span class="s2">out</span><span class="s0">, retval] int *pc);</span>
+
+<span class="s0">};</span>
+
+<span class="s0">[</span>
+	<span class="s0">uuid(</span><span class="s3">6</span><span class="s0">a237363-015c-4ded-937e-7e4d80b0a6cf),</span>
+	<span class="s0">version(</span><span class="s3">1.0</span><span class="s0">),</span>
+	<span class="s0">]</span>
+<span class="s0">library MyTypeLib</span>
+<span class="s0">{</span>
+	<span class="s0">importlib(</span><span class="s1">&quot;stdole2.tlb&quot;</span><span class="s0">);</span>
+
+	<span class="s0">[</span>
+		<span class="s0">uuid(</span><span class="s3">08420058</span><span class="s0">-ef6b-4884-9c78-14e73dfaf767),</span>
+		<span class="s0">]</span>
+		<span class="s0">coclass MyComServer {</span>
+		<span class="s0">[</span><span class="s2">default</span><span class="s0">] </span><span class="s2">interface </span><span class="s0">IMyInterface;</span>
+	<span class="s0">};</span>
+<span class="s0">};</span>
+</pre>
+</body>
+</html>

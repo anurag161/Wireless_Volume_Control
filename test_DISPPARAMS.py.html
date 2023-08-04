@@ -1,0 +1,62 @@
+<html>
+<head>
+<title>test_DISPPARAMS.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_DISPPARAMS.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest </span><span class="s0">as </span><span class="s1">ut</span>
+
+<span class="s0">class </span><span class="s1">TestCase(ut.TestCase):</span>
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s0">from </span><span class="s1">comtypes.automation </span><span class="s0">import </span><span class="s1">DISPPARAMS</span><span class="s0">, </span><span class="s1">VARIANT</span>
+
+        <span class="s1">dp = DISPPARAMS()</span>
+        <span class="s1">dp.rgvarg = (VARIANT * </span><span class="s2">3</span><span class="s1">)()</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s2">3</span><span class="s1">):</span>
+            <span class="s1">self.assertEqual(dp.rgvarg[i].value</span><span class="s0">, None</span><span class="s1">)</span>
+
+        <span class="s1">dp.rgvarg[</span><span class="s2">0</span><span class="s1">].value = </span><span class="s2">42</span>
+        <span class="s1">dp.rgvarg[</span><span class="s2">1</span><span class="s1">].value = </span><span class="s3">&quot;spam&quot;</span>
+        <span class="s1">dp.rgvarg[</span><span class="s2">2</span><span class="s1">].value = </span><span class="s3">&quot;foo&quot;</span>
+
+        <span class="s4"># damn, there's still this old bug!</span>
+
+        <span class="s1">self.assertEqual(dp.rgvarg[</span><span class="s2">0</span><span class="s1">].value</span><span class="s0">, </span><span class="s2">42</span><span class="s1">)</span>
+        <span class="s4"># these fail:</span>
+<span class="s4">##        self.failUnlessEqual(dp.rgvarg[1].value, &quot;spam&quot;)</span>
+<span class="s4">##        self.failUnlessEqual(dp.rgvarg[2].value, &quot;foo&quot;)</span>
+
+    <span class="s0">def </span><span class="s1">X_test_2(self):</span>
+        <span class="s4"># basically the same test as above</span>
+        <span class="s0">from </span><span class="s1">comtypes.automation </span><span class="s0">import </span><span class="s1">DISPPARAMS</span><span class="s0">, </span><span class="s1">VARIANT</span>
+
+        <span class="s1">args = [</span><span class="s2">42</span><span class="s0">, None, </span><span class="s3">&quot;foo&quot;</span><span class="s1">]</span>
+
+        <span class="s1">dp = DISPPARAMS()</span>
+        <span class="s1">dp.rgvarg = (VARIANT * </span><span class="s2">3</span><span class="s1">)(*list(map(VARIANT</span><span class="s0">, </span><span class="s1">args[::-</span><span class="s2">1</span><span class="s1">])))</span>
+
+        <span class="s0">import </span><span class="s1">gc</span>
+        <span class="s1">gc.collect()</span>
+
+        <span class="s1">self.assertEqual(dp.rgvarg[</span><span class="s2">0</span><span class="s1">].value</span><span class="s0">, </span><span class="s2">42</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(dp.rgvarg[</span><span class="s2">1</span><span class="s1">].value</span><span class="s0">, </span><span class="s3">&quot;spam&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(dp.rgvarg[</span><span class="s2">2</span><span class="s1">].value</span><span class="s0">, </span><span class="s3">&quot;foo&quot;</span><span class="s1">)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">ut.main()</span>
+</pre>
+</body>
+</html>

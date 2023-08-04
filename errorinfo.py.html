@@ -1,0 +1,132 @@
+<html>
+<head>
+<title>errorinfo.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+errorinfo.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IUnknown</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s1">COMMETHOD</span><span class="s0">, </span><span class="s1">GUID</span><span class="s0">, </span><span class="s1">BSTR</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s1">LPCOLESTR = c_wchar_p</span>
+<span class="s1">DWORD = c_ulong</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">0</span><span class="s1">):</span>
+    <span class="s1">base_text_type = str</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">base_text_type = basestring</span>
+
+<span class="s0">class </span><span class="s1">ICreateErrorInfo(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">&quot;{22F03340-547D-101B-8E65-08002B2BD119}&quot;</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'SetGUID'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(GUID)</span><span class="s0">, </span><span class="s3">&quot;rguid&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'SetSource'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">LPCOLESTR</span><span class="s0">, </span><span class="s3">&quot;szSource&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'SetDescription'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">LPCOLESTR</span><span class="s0">, </span><span class="s3">&quot;szDescription&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'SetHelpFile'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">LPCOLESTR</span><span class="s0">, </span><span class="s3">&quot;szHelpFile&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'SetHelpContext'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s3">&quot;dwHelpContext&quot;</span><span class="s1">))</span>
+        <span class="s1">]</span>
+
+<span class="s0">class </span><span class="s1">IErrorInfo(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">&quot;{1CF2B120-547D-101B-8E65-08002B2BD119}&quot;</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'GetGUID'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(GUID)</span><span class="s0">, </span><span class="s3">&quot;pGUID&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'GetSource'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(BSTR)</span><span class="s0">, </span><span class="s3">&quot;pBstrSource&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'GetDescription'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(BSTR)</span><span class="s0">, </span><span class="s3">&quot;pBstrDescription&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'GetHelpFile'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(BSTR)</span><span class="s0">, </span><span class="s3">&quot;pBstrHelpFile&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'GetHelpContext'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(DWORD)</span><span class="s0">, </span><span class="s3">&quot;pdwHelpContext&quot;</span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">]</span>
+
+<span class="s0">class </span><span class="s1">ISupportErrorInfo(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s3">&quot;{DF0B3D60-548F-101B-8E65-08002B2BD119}&quot;</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s3">'InterfaceSupportsErrorInfo'</span><span class="s0">,</span>
+                  <span class="s1">([</span><span class="s3">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(GUID)</span><span class="s0">, </span><span class="s3">'riid'</span><span class="s1">))</span>
+        <span class="s1">]</span>
+
+<span class="s4">################################################################</span>
+<span class="s1">_oleaut32 = oledll.oleaut32</span>
+
+<span class="s0">def </span><span class="s1">CreateErrorInfo():</span>
+    <span class="s1">cei = POINTER(ICreateErrorInfo)()</span>
+    <span class="s1">_oleaut32.CreateErrorInfo(byref(cei))</span>
+    <span class="s0">return </span><span class="s1">cei</span>
+
+<span class="s0">def </span><span class="s1">GetErrorInfo():</span>
+    <span class="s5">&quot;&quot;&quot;Get the error information for the current thread.&quot;&quot;&quot;</span>
+    <span class="s1">errinfo = POINTER(IErrorInfo)()</span>
+    <span class="s0">if </span><span class="s1">S_OK == _oleaut32.GetErrorInfo(</span><span class="s2">0</span><span class="s0">, </span><span class="s1">byref(errinfo)):</span>
+        <span class="s0">return </span><span class="s1">errinfo</span>
+    <span class="s0">return None</span>
+
+<span class="s0">def </span><span class="s1">SetErrorInfo(errinfo):</span>
+    <span class="s5">&quot;&quot;&quot;Set error information for the current thread.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">_oleaut32.SetErrorInfo(</span><span class="s2">0</span><span class="s0">, </span><span class="s1">errinfo)</span>
+
+<span class="s0">def </span><span class="s1">ReportError(text</span><span class="s0">, </span><span class="s1">iid</span><span class="s0">,</span>
+                <span class="s1">clsid=</span><span class="s0">None, </span><span class="s1">helpfile=</span><span class="s0">None, </span><span class="s1">helpcontext=</span><span class="s2">0</span><span class="s0">, </span><span class="s1">hresult=DISP_E_EXCEPTION):</span>
+    <span class="s5">&quot;&quot;&quot;Report a COM error.  Returns the passed in hresult value.&quot;&quot;&quot;</span>
+    <span class="s1">ei = CreateErrorInfo()</span>
+    <span class="s1">ei.SetDescription(text)</span>
+    <span class="s1">ei.SetGUID(iid)</span>
+    <span class="s0">if </span><span class="s1">helpfile </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s1">ei.SetHelpFile(helpfile)</span>
+    <span class="s0">if </span><span class="s1">helpcontext </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s1">ei.SetHelpContext(helpcontext)</span>
+    <span class="s0">if </span><span class="s1">clsid </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s1">isinstance(clsid</span><span class="s0">, </span><span class="s1">base_text_type):</span>
+            <span class="s1">clsid = GUID(clsid)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">progid = clsid.as_progid()</span>
+        <span class="s0">except </span><span class="s1">WindowsError:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">ei.SetSource(progid) </span><span class="s4"># progid for the class or application that created the error</span>
+    <span class="s1">_oleaut32.SetErrorInfo(</span><span class="s2">0</span><span class="s0">, </span><span class="s1">ei)</span>
+    <span class="s0">return </span><span class="s1">hresult</span>
+
+<span class="s0">def </span><span class="s1">ReportException(hresult</span><span class="s0">, </span><span class="s1">iid</span><span class="s0">, </span><span class="s1">clsid=</span><span class="s0">None, </span><span class="s1">helpfile=</span><span class="s0">None, </span><span class="s1">helpcontext=</span><span class="s0">None,</span>
+                    <span class="s1">stacklevel=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s5">&quot;&quot;&quot;Report a COM exception.  Returns the passed in hresult value.&quot;&quot;&quot;</span>
+    <span class="s1">typ</span><span class="s0">, </span><span class="s1">value</span><span class="s0">, </span><span class="s1">tb = sys.exc_info()</span>
+    <span class="s0">if </span><span class="s1">stacklevel </span><span class="s0">is not None</span><span class="s1">:</span>
+        <span class="s0">for </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">range(stacklevel):</span>
+            <span class="s1">tb = tb.tb_next</span>
+        <span class="s1">line = tb.tb_frame.f_lineno</span>
+        <span class="s1">name = tb.tb_frame.f_globals[</span><span class="s3">&quot;__name__&quot;</span><span class="s1">]</span>
+        <span class="s1">text = </span><span class="s3">&quot;%s: %s (%s, line %d)&quot; </span><span class="s1">% (typ</span><span class="s0">, </span><span class="s1">value</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">line)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">text = </span><span class="s3">&quot;%s: %s&quot; </span><span class="s1">% (typ</span><span class="s0">, </span><span class="s1">value)</span>
+    <span class="s0">return </span><span class="s1">ReportError(text</span><span class="s0">, </span><span class="s1">iid</span><span class="s0">,</span>
+                       <span class="s1">clsid=clsid</span><span class="s0">, </span><span class="s1">helpfile=helpfile</span><span class="s0">, </span><span class="s1">helpcontext=helpcontext</span><span class="s0">,</span>
+                       <span class="s1">hresult=hresult)</span>
+
+<span class="s1">__all__ = [</span><span class="s3">&quot;ICreateErrorInfo&quot;</span><span class="s0">, </span><span class="s3">&quot;IErrorInfo&quot;</span><span class="s0">, </span><span class="s3">&quot;ISupportErrorInfo&quot;</span><span class="s0">,</span>
+           <span class="s3">&quot;ReportError&quot;</span><span class="s0">, </span><span class="s3">&quot;ReportException&quot;</span><span class="s0">,</span>
+           <span class="s3">&quot;SetErrorInfo&quot;</span><span class="s0">, </span><span class="s3">&quot;GetErrorInfo&quot;</span><span class="s0">, </span><span class="s3">&quot;CreateErrorInfo&quot;</span><span class="s1">]</span>
+</pre>
+</body>
+</html>

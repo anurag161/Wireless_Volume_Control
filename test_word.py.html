@@ -1,0 +1,110 @@
+<html>
+<head>
+<title>test_word.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_word.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">time</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMError</span>
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s1">comtypes.client.GetModule((</span><span class="s2">'{00020905-0000-0000-C000-000000000046}'</span><span class="s0">,</span><span class="s1">))  </span><span class="s3"># Word libUUID</span>
+    <span class="s0">from </span><span class="s1">comtypes.gen </span><span class="s0">import </span><span class="s1">Word</span>
+    <span class="s1">IMPORT_FAILED = </span><span class="s0">False</span>
+<span class="s0">except </span><span class="s1">(ImportError</span><span class="s0">, </span><span class="s1">OSError):</span>
+    <span class="s1">IMPORT_FAILED = </span><span class="s0">True</span>
+
+
+<span class="s3">################################################################</span>
+<span class="s3">#</span>
+<span class="s3"># TODO:</span>
+<span class="s3">#</span>
+<span class="s3"># It seems bad that only external test like this</span>
+<span class="s3"># can verify the behavior of `comtypes` implementation.</span>
+<span class="s3"># Find a different built-in win32 API to use.</span>
+<span class="s3">#</span>
+<span class="s3">################################################################</span>
+
+
+<span class="s0">class </span><span class="s1">_Sink(object):</span>
+    <span class="s0">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.events = []</span>
+
+    <span class="s3"># Word Application Event</span>
+    <span class="s0">def </span><span class="s1">DocumentChange(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s1">self.events.append(</span><span class="s2">&quot;DocumentChange&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@unittest.skipIf(IMPORT_FAILED</span><span class="s0">, </span><span class="s2">&quot;This depends on Word.&quot;</span><span class="s1">)</span>
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">setUp(self):</span>
+        <span class="s3"># create a word instance</span>
+        <span class="s1">self.word = comtypes.client.CreateObject(</span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s1">self.word.Quit()</span>
+        <span class="s0">del </span><span class="s1">self.word</span>
+
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s1">word = self.word</span>
+        <span class="s3"># Get the instance again, and receive events from that</span>
+        <span class="s1">w2 = comtypes.client.GetActiveObject(</span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+        <span class="s1">sink = _Sink()</span>
+        <span class="s1">conn = comtypes.client.GetEvents(w2</span><span class="s0">, </span><span class="s1">sink=sink)</span>
+
+        <span class="s1">word.Visible = </span><span class="s4">1</span>
+
+        <span class="s1">doc = word.Documents.Add()</span>
+        <span class="s1">wrange = doc.Range()</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">10</span><span class="s1">):</span>
+            <span class="s1">wrange.InsertAfter(</span><span class="s2">&quot;Hello from comtypes %d</span><span class="s0">\n</span><span class="s2">&quot; </span><span class="s1">% i)</span>
+
+        <span class="s0">for </span><span class="s1">i</span><span class="s0">, </span><span class="s1">para </span><span class="s0">in </span><span class="s1">enumerate(doc.Paragraphs):</span>
+            <span class="s1">f = para.Range.Font</span>
+            <span class="s1">f.ColorIndex = i+</span><span class="s4">1</span>
+            <span class="s1">f.Size = </span><span class="s4">12 </span><span class="s1">+ (</span><span class="s4">2 </span><span class="s1">* i)</span>
+
+        <span class="s1">time.sleep(</span><span class="s4">0.5</span><span class="s1">)</span>
+
+        <span class="s1">doc.Close(SaveChanges = Word.wdDoNotSaveChanges)</span>
+
+        <span class="s0">del </span><span class="s1">word</span><span class="s0">, </span><span class="s1">w2</span>
+
+        <span class="s1">time.sleep(</span><span class="s4">0.5</span><span class="s1">)</span>
+        <span class="s1">conn.disconnect()</span>
+
+        <span class="s1">self.assertEqual(sink.events</span><span class="s0">, </span><span class="s1">[</span><span class="s2">&quot;DocumentChange&quot;</span><span class="s0">, </span><span class="s2">&quot;DocumentChange&quot;</span><span class="s1">])</span>
+
+    <span class="s0">def </span><span class="s1">test_commandbar(self):</span>
+        <span class="s1">word = self.word</span>
+        <span class="s1">word.Visible = </span><span class="s4">1</span>
+        <span class="s1">tb = word.CommandBars(</span><span class="s2">&quot;Standard&quot;</span><span class="s1">)</span>
+        <span class="s1">btn = tb.Controls[</span><span class="s4">1</span><span class="s1">]</span>
+
+        <span class="s3"># word does not allow programmatic access, so this does fail</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(COMError):</span>
+            <span class="s1">word.VBE.Events.CommandBarEvents(btn)</span>
+
+        <span class="s0">del </span><span class="s1">word</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

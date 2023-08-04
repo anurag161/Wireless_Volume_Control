@@ -1,0 +1,325 @@
+<html>
+<head>
+<title>test_server.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_server.py</font>
+</center></td></tr></table>
+<pre><span class="s0">try</span><span class="s1">:</span>
+    <span class="s2"># Force module to raise.  We catch this error later.  Yes, a dirty hack for python2.7.</span>
+    <span class="s0">raise </span><span class="s1">WindowsError(</span><span class="s3">&quot;This test module cannot run as-is.  Investigate why&quot;</span><span class="s1">)</span>
+    <span class="s0">import </span><span class="s1">atexit</span><span class="s0">, </span><span class="s1">os</span><span class="s0">, </span><span class="s1">unittest</span>
+
+    <span class="s0">import </span><span class="s1">comtypes.typeinfo</span><span class="s0">, </span><span class="s1">comtypes.client</span>
+
+
+
+
+    <span class="s0">class </span><span class="s1">TypeLib(object):</span>
+        <span class="s4">&quot;&quot;&quot;This class collects IDL code fragments and eventually writes 
+        them into a .IDL file.  The compile() method compiles the IDL file 
+        into a typelibrary and registers it.  A function is also 
+        registered with atexit that will unregister the typelib at program 
+        exit. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">lib):</span>
+            <span class="s1">self.lib = lib</span>
+            <span class="s1">self.interfaces = []</span>
+            <span class="s1">self.coclasses = []</span>
+
+        <span class="s0">def </span><span class="s1">interface(self</span><span class="s0">, </span><span class="s1">header):</span>
+            <span class="s1">itf = Interface(header)</span>
+            <span class="s1">self.interfaces.append(itf)</span>
+            <span class="s0">return </span><span class="s1">itf</span>
+
+        <span class="s0">def </span><span class="s1">coclass(self</span><span class="s0">, </span><span class="s1">definition):</span>
+            <span class="s1">self.coclasses.append(definition)</span>
+
+        <span class="s0">def </span><span class="s1">__str__(self):</span>
+            <span class="s1">header = </span><span class="s3">'''import &quot;oaidl.idl&quot;; 
+                        import &quot;ocidl.idl&quot;; 
+                        %s {''' </span><span class="s1">% self.lib</span>
+            <span class="s1">body = </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.join([str(itf) </span><span class="s0">for </span><span class="s1">itf </span><span class="s0">in </span><span class="s1">self.interfaces])</span>
+            <span class="s1">footer = </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.join(self.coclasses) + </span><span class="s3">&quot;}&quot;</span>
+            <span class="s0">return </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s1">.join((header</span><span class="s0">, </span><span class="s1">body</span><span class="s0">, </span><span class="s1">footer))</span>
+
+        <span class="s0">def </span><span class="s1">compile(self):</span>
+            <span class="s4">&quot;&quot;&quot;Compile and register the typelib&quot;&quot;&quot;</span>
+            <span class="s1">code = str(self)</span>
+            <span class="s1">curdir = os.path.dirname(__file__)</span>
+            <span class="s1">idl_path = os.path.join(curdir</span><span class="s0">, </span><span class="s3">&quot;mylib.idl&quot;</span><span class="s1">)</span>
+            <span class="s1">tlb_path = os.path.join(curdir</span><span class="s0">, </span><span class="s3">&quot;mylib.tlb&quot;</span><span class="s1">)</span>
+            <span class="s0">if not </span><span class="s1">os.path.isfile(idl_path) </span><span class="s0">or </span><span class="s1">open(idl_path</span><span class="s0">, </span><span class="s3">&quot;r&quot;</span><span class="s1">).read() != code:</span>
+                <span class="s1">open(idl_path</span><span class="s0">, </span><span class="s3">&quot;w&quot;</span><span class="s1">).write(code)</span>
+                <span class="s1">os.system(</span><span class="s3">r'call &quot;%%VS71COMNTOOLS%%vsvars32.bat&quot; &amp;&amp; '</span>
+                          <span class="s3">r'midl /nologo %s /tlb %s' </span><span class="s1">% (idl_path</span><span class="s0">, </span><span class="s1">tlb_path))</span>
+            <span class="s2"># Register the typelib...</span>
+            <span class="s1">tlib = comtypes.typeinfo.LoadTypeLib(tlb_path)</span>
+            <span class="s2"># create the wrapper module...</span>
+            <span class="s1">comtypes.client.GetModule(tlb_path)</span>
+            <span class="s2"># Unregister the typelib at interpreter exit...</span>
+            <span class="s1">attr = tlib.GetLibAttr()</span>
+            <span class="s1">guid</span><span class="s0">, </span><span class="s1">major</span><span class="s0">, </span><span class="s1">minor = attr.guid</span><span class="s0">, </span><span class="s1">attr.wMajorVerNum</span><span class="s0">, </span><span class="s1">attr.wMinorVerNum</span>
+    <span class="s2">##        atexit.register(comtypes.typeinfo.UnRegisterTypeLib,</span>
+    <span class="s2">##                        guid, major, minor)</span>
+            <span class="s0">return </span><span class="s1">tlb_path</span>
+
+    <span class="s0">class </span><span class="s1">Interface(object):</span>
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">header):</span>
+            <span class="s1">self.header = header</span>
+            <span class="s1">self.code = </span><span class="s3">&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">add(self</span><span class="s0">, </span><span class="s1">text):</span>
+            <span class="s1">self.code += text + </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span>
+            <span class="s0">return </span><span class="s1">self</span>
+
+        <span class="s0">def </span><span class="s1">__str__(self):</span>
+            <span class="s0">return </span><span class="s1">self.header + </span><span class="s3">&quot; {</span><span class="s0">\n</span><span class="s3">&quot; </span><span class="s1">+ self.code + </span><span class="s3">&quot;}</span><span class="s0">\n</span><span class="s3">&quot;</span>
+
+    <span class="s2">################################################################</span>
+    <span class="s0">import </span><span class="s1">comtypes</span>
+    <span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">wrap</span>
+
+    <span class="s1">tlb = TypeLib(</span><span class="s3">&quot;[uuid(f4f74946-4546-44bd-a073-9ea6f9fe78cb)] library TestLib&quot;</span><span class="s1">)</span>
+
+    <span class="s1">itf = tlb.interface(</span><span class="s3">&quot;&quot;&quot;[object, 
+                            oleautomation, 
+                            dual, 
+                            uuid(ed978f5f-cc45-4fcc-a7a6-751ffa8dfedd)] 
+                            interface IMyInterface : IDispatch&quot;&quot;&quot;</span><span class="s1">)</span>
+
+    <span class="s1">outgoing = tlb.interface(</span><span class="s3">&quot;&quot;&quot;[object, 
+                                 oleautomation, 
+                                 dual, 
+                                 uuid(f7c48a90-64ea-4bb8-abf1-b3a3aa996848)] 
+                                 interface IMyEventInterface : IDispatch&quot;&quot;&quot;</span><span class="s1">)</span>
+
+    <span class="s1">tlb.coclass(</span><span class="s3">&quot;&quot;&quot; 
+    [uuid(fa9de8f4-20de-45fc-b079-648572428817)] 
+    coclass MyServer { 
+        [default] interface IMyInterface; 
+        [default, source] interface IMyEventInterface; 
+    }; 
+    &quot;&quot;&quot;</span><span class="s1">)</span>
+
+    <span class="s2"># The purpose of the MyServer class is to locate three separate code</span>
+    <span class="s2"># section snippets closely together:</span>
+    <span class="s2">#</span>
+    <span class="s2"># 1. The IDL method definition for a COM interface method</span>
+    <span class="s2"># 2. The Python implementation of the COM method</span>
+    <span class="s2"># 3. The unittest(s) for the COM method.</span>
+    <span class="s2">#</span>
+    <span class="s0">from </span><span class="s1">comtypes.server.connectionpoints </span><span class="s0">import </span><span class="s1">ConnectableObjectMixin</span>
+    <span class="s0">class </span><span class="s1">MyServer(comtypes.CoClass</span><span class="s0">, </span><span class="s1">ConnectableObjectMixin):</span>
+        <span class="s1">_reg_typelib_ = (</span><span class="s3">'{f4f74946-4546-44bd-a073-9ea6f9fe78cb}'</span><span class="s0">, </span><span class="s5">0</span><span class="s0">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">_reg_clsid_ = comtypes.GUID(</span><span class="s3">'{fa9de8f4-20de-45fc-b079-648572428817}'</span><span class="s1">)</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;&quot;&quot;[id(100), propget] HRESULT Name([out, retval] BSTR *pname); 
+                   [id(100), propput] HRESULT Name([in] BSTR name);&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s1">Name = </span><span class="s3">&quot;foo&quot;</span>
+        <span class="s2"># test</span>
+        <span class="s0">def </span><span class="s1">test_Name(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s1">self.assertEqual((p.Name</span><span class="s0">, </span><span class="s1">p.name</span><span class="s0">, </span><span class="s1">p.nAME)</span><span class="s0">, </span><span class="s1">(</span><span class="s3">&quot;foo&quot;</span><span class="s0">,</span><span class="s1">) * </span><span class="s5">3</span><span class="s1">)</span>
+            <span class="s1">p.NAME = </span><span class="s3">&quot;spam&quot;</span>
+            <span class="s1">self.assertEqual((p.Name</span><span class="s0">, </span><span class="s1">p.name</span><span class="s0">, </span><span class="s1">p.nAME)</span><span class="s0">, </span><span class="s1">(</span><span class="s3">&quot;spam&quot;</span><span class="s0">,</span><span class="s1">) * </span><span class="s5">3</span><span class="s1">)</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;[id(101)] HRESULT MixedInOut([in] int a, [out] int *b, [in] int c, [out] int *d);&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s0">def </span><span class="s1">MixedInOut(self</span><span class="s0">, </span><span class="s1">a</span><span class="s0">, </span><span class="s1">c):</span>
+            <span class="s0">return </span><span class="s1">a+</span><span class="s5">1</span><span class="s0">, </span><span class="s1">c+</span><span class="s5">1</span>
+        <span class="s2">#test</span>
+        <span class="s0">def </span><span class="s1">test_MixedInOut(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s1">self.assertEqual(p.MixedInOut(</span><span class="s5">1</span><span class="s0">, </span><span class="s5">2</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s5">2</span><span class="s0">, </span><span class="s5">3</span><span class="s1">))</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;[id(102)] HRESULT MultiInOutArgs([in, out] int *pa, [in, out] int *pb);&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s0">def </span><span class="s1">MultiInOutArgs(self</span><span class="s0">, </span><span class="s1">pa</span><span class="s0">, </span><span class="s1">pb):</span>
+            <span class="s0">return </span><span class="s1">pa[</span><span class="s5">0</span><span class="s1">] * </span><span class="s5">3</span><span class="s0">, </span><span class="s1">pb[</span><span class="s5">0</span><span class="s1">] * </span><span class="s5">4</span>
+        <span class="s2"># test</span>
+        <span class="s0">def </span><span class="s1">test_MultiInOutArgs(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s1">self.assertEqual(p.MultiInOutArgs(</span><span class="s5">1</span><span class="s0">, </span><span class="s5">2</span><span class="s1">)</span><span class="s0">, </span><span class="s1">(</span><span class="s5">3</span><span class="s0">, </span><span class="s5">8</span><span class="s1">))</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;HRESULT MultiInOutArgs2([in, out] int *pa, [out] int *pb);&quot;</span><span class="s1">)</span>
+    <span class="s2">##    # implementation</span>
+    <span class="s2">##    def MultiInOutArgs2(self, pa):</span>
+    <span class="s2">##        return pa[0] * 3, pa[0] * 4</span>
+    <span class="s2">##    # test</span>
+    <span class="s2">##    def test_MultiInOutArgs2(self):</span>
+    <span class="s2">##        p = wrap(self.create())</span>
+    <span class="s2">##        self.assertEqual(p.MultiInOutArgs2(42), (126, 168))</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;HRESULT MultiInOutArgs3([out] int *pa, [out] int *pb);&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s0">def </span><span class="s1">MultiInOutArgs3(self):</span>
+            <span class="s0">return </span><span class="s5">42</span><span class="s0">, </span><span class="s5">43</span>
+        <span class="s2"># test</span>
+        <span class="s0">def </span><span class="s1">test_MultiInOutArgs3(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s1">self.assertEqual(p.MultiInOutArgs3()</span><span class="s0">, </span><span class="s1">(</span><span class="s5">42</span><span class="s0">, </span><span class="s5">43</span><span class="s1">))</span>
+
+        <span class="s2">################</span>
+        <span class="s2"># definition</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;HRESULT MultiInOutArgs4([out] int *pa, [in, out] int *pb);&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s0">def </span><span class="s1">MultiInOutArgs4(self</span><span class="s0">, </span><span class="s1">pb):</span>
+            <span class="s0">return </span><span class="s1">pb[</span><span class="s5">0</span><span class="s1">] + </span><span class="s5">3</span><span class="s0">, </span><span class="s1">pb[</span><span class="s5">0</span><span class="s1">] + </span><span class="s5">4</span>
+        <span class="s2"># test</span>
+        <span class="s0">def </span><span class="s1">test_MultiInOutArgs4(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s1">res = p.MultiInOutArgs4(pb=</span><span class="s5">32</span><span class="s1">)</span>
+    <span class="s2">##        print &quot;MultiInOutArgs4&quot;, res</span>
+
+        <span class="s1">itf.add(</span><span class="s3">&quot;&quot;&quot;HRESULT GetStackTrace([in] ULONG FrameOffset, 
+                                         [in, out] INT *Frames, 
+                                         [in] ULONG FramesSize, 
+                                         [out, optional] ULONG *FramesFilled);&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">GetStackTrace(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+    <span class="s2">##        print &quot;GetStackTrace&quot;, args</span>
+            <span class="s0">return </span><span class="s5">0</span>
+        <span class="s0">def </span><span class="s1">test_GetStackTrace(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">c_int</span><span class="s0">, </span><span class="s1">POINTER</span><span class="s0">, </span><span class="s1">pointer</span>
+            <span class="s1">frames = (c_int * </span><span class="s5">5</span><span class="s1">)()</span>
+            <span class="s1">res = p.GetStackTrace(</span><span class="s5">42</span><span class="s0">, </span><span class="s1">frames</span><span class="s0">, </span><span class="s5">5</span><span class="s1">)</span>
+    <span class="s2">##        print &quot;RES_1&quot;, res</span>
+
+            <span class="s1">frames = pointer(c_int(</span><span class="s5">5</span><span class="s1">))</span>
+            <span class="s1">res = p.GetStackTrace(</span><span class="s5">42</span><span class="s0">, </span><span class="s1">frames</span><span class="s0">, </span><span class="s5">0</span><span class="s1">)</span>
+    <span class="s2">##        print &quot;RES_2&quot;, res</span>
+
+        <span class="s2"># It is unlear to me if this is allowed or not.  Apparently there</span>
+        <span class="s2"># are typelibs that define such an argument type, but it may be</span>
+        <span class="s2"># that these are buggy.</span>
+        <span class="s2">#</span>
+        <span class="s2"># Point is that SafeArrayCreateEx(VT_VARIANT|VT_BYREF, ..) fails.</span>
+        <span class="s2"># The MSDN docs for SafeArrayCreate() have a notice that neither</span>
+        <span class="s2"># VT_ARRAY not VT_BYREF may be set, this notice is missing however</span>
+        <span class="s2"># for SafeArrayCreateEx().</span>
+        <span class="s2">#</span>
+        <span class="s2"># We have this code here to make sure that comtypes can import</span>
+        <span class="s2"># such a typelib, although calling ths method will fail because</span>
+        <span class="s2"># such an array cannot be created.</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;&quot;&quot;HRESULT dummy([in] SAFEARRAY(VARIANT *) foo);&quot;&quot;&quot;</span><span class="s1">)</span>
+
+
+        <span class="s2"># Test events.</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;&quot;&quot;HRESULT DoSomething();&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s1">outgoing.add(</span><span class="s3">&quot;&quot;&quot;[id(103)] HRESULT OnSomething();&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s2"># implementation</span>
+        <span class="s0">def </span><span class="s1">DoSomething(self):</span>
+            <span class="s4">&quot;Implement the DoSomething method&quot;</span>
+            <span class="s1">self.Fire_Event(</span><span class="s5">0</span><span class="s0">, </span><span class="s3">&quot;OnSomething&quot;</span><span class="s1">)</span>
+        <span class="s2"># test</span>
+        <span class="s0">def </span><span class="s1">test_events(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s0">class </span><span class="s1">Handler(object):</span>
+                <span class="s1">called = </span><span class="s5">0</span>
+                <span class="s0">def </span><span class="s1">OnSomething(self</span><span class="s0">, </span><span class="s1">this):</span>
+                    <span class="s4">&quot;Handles the OnSomething event&quot;</span>
+                    <span class="s1">self.called += </span><span class="s5">1</span>
+            <span class="s1">handler = Handler()</span>
+            <span class="s1">ev = comtypes.client.GetEvents(p</span><span class="s0">, </span><span class="s1">handler)</span>
+            <span class="s1">p.DoSomething()</span>
+            <span class="s1">self.assertEqual(handler.called</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+            <span class="s0">class </span><span class="s1">Handler(object):</span>
+                <span class="s1">called = </span><span class="s5">0</span>
+                <span class="s0">def </span><span class="s1">IMyEventInterface_OnSomething(self):</span>
+                    <span class="s4">&quot;Handles the OnSomething event&quot;</span>
+                    <span class="s1">self.called += </span><span class="s5">1</span>
+            <span class="s1">handler = Handler()</span>
+            <span class="s1">ev = comtypes.client.GetEvents(p</span><span class="s0">, </span><span class="s1">handler)</span>
+            <span class="s1">p.DoSomething()</span>
+            <span class="s1">self.assertEqual(handler.called</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+        <span class="s2"># events with out-parameters (these are probably very unlikely...)</span>
+        <span class="s1">itf.add(</span><span class="s3">&quot;&quot;&quot;HRESULT DoSomethingElse();&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s1">outgoing.add(</span><span class="s3">&quot;&quot;&quot;[id(104)] HRESULT OnSomethingElse([out, retval] int *px);&quot;&quot;&quot;</span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">DoSomethingElse(self):</span>
+            <span class="s4">&quot;Implement the DoSomething method&quot;</span>
+            <span class="s1">self.Fire_Event(</span><span class="s5">0</span><span class="s0">, </span><span class="s3">&quot;OnSomethingElse&quot;</span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">test_DoSomethingElse(self):</span>
+            <span class="s1">p = wrap(self.create())</span>
+            <span class="s0">class </span><span class="s1">Handler(object):</span>
+                <span class="s1">called = </span><span class="s5">0</span>
+                <span class="s0">def </span><span class="s1">OnSomethingElse(self):</span>
+                    <span class="s4">&quot;Handles the OnSomething event&quot;</span>
+                    <span class="s1">self.called += </span><span class="s5">1</span>
+                    <span class="s0">return </span><span class="s5">42</span>
+            <span class="s1">handler = Handler()</span>
+            <span class="s1">ev = comtypes.client.GetEvents(p</span><span class="s0">, </span><span class="s1">handler)</span>
+            <span class="s1">p.DoSomethingElse()</span>
+            <span class="s1">self.assertEqual(handler.called</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+            <span class="s0">class </span><span class="s1">Handler(object):</span>
+                <span class="s1">called = </span><span class="s5">0</span>
+                <span class="s0">def </span><span class="s1">OnSomethingElse(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">presult):</span>
+                    <span class="s4">&quot;Handles the OnSomething event&quot;</span>
+                    <span class="s1">self.called += </span><span class="s5">1</span>
+                    <span class="s1">presult[</span><span class="s5">0</span><span class="s1">] = </span><span class="s5">42</span>
+            <span class="s1">handler = Handler()</span>
+            <span class="s1">ev = comtypes.client.GetEvents(p</span><span class="s0">, </span><span class="s1">handler)</span>
+            <span class="s1">p.DoSomethingElse()</span>
+            <span class="s1">self.assertEqual(handler.called</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s2">################################################################</span>
+
+    <span class="s1">path = tlb.compile()</span>
+    <span class="s0">from </span><span class="s1">comtypes.gen </span><span class="s0">import </span><span class="s1">TestLib</span>
+    <span class="s0">from </span><span class="s1">comtypes.typeinfo </span><span class="s0">import </span><span class="s1">IProvideClassInfo</span><span class="s0">, </span><span class="s1">IProvideClassInfo2</span>
+    <span class="s0">from </span><span class="s1">comtypes.connectionpoints </span><span class="s0">import </span><span class="s1">IConnectionPointContainer</span>
+
+    <span class="s1">MyServer._com_interfaces_ = [TestLib.IMyInterface</span><span class="s0">,</span>
+                                 <span class="s1">IProvideClassInfo2</span><span class="s0">,</span>
+                                 <span class="s1">IConnectionPointContainer]</span>
+    <span class="s1">MyServer._outgoing_interfaces_ = [TestLib.IMyEventInterface]</span>
+
+    <span class="s2">################################################################</span>
+
+    <span class="s0">class </span><span class="s1">Test(unittest.TestCase</span><span class="s0">, </span><span class="s1">MyServer):</span>
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">*args):</span>
+            <span class="s1">unittest.TestCase.__init__(self</span><span class="s0">, </span><span class="s1">*args)</span>
+            <span class="s1">MyServer.__init__(self)</span>
+
+        <span class="s0">def </span><span class="s1">create(self):</span>
+            <span class="s1">obj = MyServer()</span>
+            <span class="s0">return </span><span class="s1">obj.QueryInterface(comtypes.IUnknown)</span>
+<span class="s0">except</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">unittest</span>
+
+    <span class="s0">class </span><span class="s1">TestSkipped(unittest.TestCase):</span>
+        <span class="s1">@unittest.skip(</span><span class="s3">&quot;This file causes a WindowsError.  Needs investigated and fixed.&quot;</span><span class="s1">)</span>
+        <span class="s0">def </span><span class="s1">test_server_module_skipped(self):</span>
+            <span class="s0">pass</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

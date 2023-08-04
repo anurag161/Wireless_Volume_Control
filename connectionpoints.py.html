@@ -1,0 +1,165 @@
+<html>
+<head>
+<title>connectionpoints.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+connectionpoints.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IUnknown</span><span class="s0">, </span><span class="s1">COMObject</span><span class="s0">, </span><span class="s1">COMError</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes.typeinfo </span><span class="s0">import </span><span class="s1">LoadRegTypeLib</span>
+<span class="s0">from </span><span class="s1">comtypes.connectionpoints </span><span class="s0">import </span><span class="s1">IConnectionPoint</span>
+<span class="s0">from </span><span class="s1">comtypes.automation </span><span class="s0">import </span><span class="s1">IDispatch</span>
+
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s1">logger = logging.getLogger(__name__)</span>
+
+<span class="s1">__all__ = [</span><span class="s2">&quot;ConnectableObjectMixin&quot;</span><span class="s1">]</span>
+
+<span class="s0">class </span><span class="s1">ConnectionPointImpl(COMObject):</span>
+    <span class="s3">&quot;&quot;&quot;This object implements a connectionpoint&quot;&quot;&quot;</span>
+    <span class="s1">_com_interfaces_ = [IConnectionPoint]</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">sink_interface</span><span class="s0">, </span><span class="s1">sink_typeinfo):</span>
+        <span class="s1">super(ConnectionPointImpl</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+        <span class="s1">self._connections = {}</span>
+        <span class="s1">self._cookie = </span><span class="s4">0</span>
+        <span class="s1">self._sink_interface = sink_interface</span>
+        <span class="s1">self._typeinfo = sink_typeinfo</span>
+
+    <span class="s5"># per MSDN, all interface methods *must* be implemented, E_NOTIMPL</span>
+    <span class="s5"># is no allowed return value</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPoint_Advise(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">pUnk</span><span class="s0">, </span><span class="s1">pdwCookie):</span>
+        <span class="s0">if not </span><span class="s1">pUnk </span><span class="s0">or not </span><span class="s1">pdwCookie:</span>
+            <span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;Advise&quot;</span><span class="s1">)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">ptr = pUnk.QueryInterface(self._sink_interface)</span>
+        <span class="s0">except </span><span class="s1">COMError:</span>
+            <span class="s0">return </span><span class="s1">CONNECT_E_CANNOTCONNECT</span>
+        <span class="s1">pdwCookie[</span><span class="s4">0</span><span class="s1">] = self._cookie = self._cookie + </span><span class="s4">1</span>
+        <span class="s1">self._connections[self._cookie] = ptr</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPoint_Unadvise(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">dwCookie):</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;Unadvise %s&quot;</span><span class="s0">, </span><span class="s1">dwCookie)</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">del </span><span class="s1">self._connections[dwCookie]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">return </span><span class="s1">CONNECT_E_NOCONNECTION</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPoint_GetConnectionPointContainer(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">ppCPC):</span>
+        <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPoint_GetConnectionInterface(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">pIID):</span>
+        <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+
+    <span class="s0">def </span><span class="s1">_call_sinks(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s1">results = []</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;_call_sinks(%s, %s, *%s, **%s)&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw)</span>
+        <span class="s5"># Is it an IDispatch derived interface?  Then, events have to be delivered</span>
+        <span class="s5"># via Invoke calls (even if it is a dual interface).</span>
+        <span class="s0">if </span><span class="s1">hasattr(self._sink_interface</span><span class="s0">, </span><span class="s2">&quot;Invoke&quot;</span><span class="s1">):</span>
+            <span class="s5"># for better performance, we could cache the dispids.</span>
+            <span class="s1">dispid = self._typeinfo.GetIDsOfNames(name)[</span><span class="s4">0</span><span class="s1">]</span>
+            <span class="s0">for </span><span class="s1">key</span><span class="s0">, </span><span class="s1">p </span><span class="s0">in </span><span class="s1">self._connections.items():</span>
+                <span class="s0">try</span><span class="s1">:</span>
+                    <span class="s1">result = p.Invoke(dispid</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+                <span class="s0">except </span><span class="s1">COMError </span><span class="s0">as </span><span class="s1">details:</span>
+                    <span class="s0">if </span><span class="s1">details.hresult == -</span><span class="s4">2147023174</span><span class="s1">:</span>
+                        <span class="s1">logger.warning(</span><span class="s2">&quot;_call_sinks(%s, %s, *%s, **%s) failed; removing connection&quot;</span><span class="s0">,</span>
+                                       <span class="s1">self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw</span><span class="s0">,</span>
+                                       <span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+                        <span class="s0">try</span><span class="s1">:</span>
+                            <span class="s0">del </span><span class="s1">self._connections[key]</span>
+                        <span class="s0">except </span><span class="s1">KeyError:</span>
+                            <span class="s0">pass </span><span class="s5"># connection already gone</span>
+                    <span class="s0">else</span><span class="s1">:</span>
+                        <span class="s1">logger.warning(</span><span class="s2">&quot;_call_sinks(%s, %s, *%s, **%s)&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw</span><span class="s0">,</span>
+                                       <span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">results.append(result)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">self._connections.values():</span>
+                <span class="s0">try</span><span class="s1">:</span>
+                    <span class="s1">result = getattr(p</span><span class="s0">, </span><span class="s1">name)(*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+                <span class="s0">except </span><span class="s1">COMError </span><span class="s0">as </span><span class="s1">details:</span>
+                    <span class="s0">if </span><span class="s1">details.hresult == -</span><span class="s4">2147023174</span><span class="s1">:</span>
+                        <span class="s1">logger.warning(</span><span class="s2">&quot;_call_sinks(%s, %s, *%s, **%s) failed; removing connection&quot;</span><span class="s0">,</span>
+                                       <span class="s1">self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw</span><span class="s0">,</span>
+                                       <span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+                        <span class="s0">del </span><span class="s1">self._connections[key]</span>
+                    <span class="s0">else</span><span class="s1">:</span>
+                        <span class="s1">logger.warning(</span><span class="s2">&quot;_call_sinks(%s, %s, *%s, **%s)&quot;</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw</span><span class="s0">,</span>
+                                       <span class="s1">exc_info=</span><span class="s0">True</span><span class="s1">)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">results.append(result)</span>
+        <span class="s0">return </span><span class="s1">results</span>
+
+<span class="s0">class </span><span class="s1">ConnectableObjectMixin(object):</span>
+    <span class="s3">&quot;&quot;&quot;Mixin which implements IConnectionPointContainer. 
+ 
+    Call Fire_Event(interface, methodname, *args, **kw) to fire an 
+    event.  &lt;interface&gt; can either be the source interface, or an 
+    integer index into the _outgoing_interfaces_ list. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">super(ConnectableObjectMixin</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+        <span class="s1">self.__connections = {}</span>
+
+        <span class="s1">tlib = LoadRegTypeLib(*self._reg_typelib_)</span>
+        <span class="s0">for </span><span class="s1">itf </span><span class="s0">in </span><span class="s1">self._outgoing_interfaces_:</span>
+            <span class="s1">typeinfo = tlib.GetTypeInfoOfGuid(itf._iid_)</span>
+            <span class="s1">self.__connections[itf] = ConnectionPointImpl(itf</span><span class="s0">, </span><span class="s1">typeinfo)</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPointContainer_EnumConnectionPoints(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">ppEnum):</span>
+        <span class="s5"># according to MSDN, E_NOTIMPL is specificially disallowed</span>
+        <span class="s5"># because, without typeinfo, there's no way for the caller to</span>
+        <span class="s5"># find out.</span>
+        <span class="s0">return </span><span class="s1">E_NOTIMPL</span>
+
+    <span class="s0">def </span><span class="s1">IConnectionPointContainer_FindConnectionPoint(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">refiid</span><span class="s0">, </span><span class="s1">ppcp):</span>
+        <span class="s1">iid = refiid[</span><span class="s4">0</span><span class="s1">]</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;FindConnectionPoint %s&quot;</span><span class="s0">, </span><span class="s1">iid)</span>
+        <span class="s0">if not </span><span class="s1">ppcp:</span>
+            <span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s0">for </span><span class="s1">itf </span><span class="s0">in </span><span class="s1">self._outgoing_interfaces_:</span>
+            <span class="s0">if </span><span class="s1">itf._iid_ == iid:</span>
+                <span class="s5"># 'byref' will not work in this case, since the QueryInterface</span>
+                <span class="s5"># method implementation is called on Python directly. There's</span>
+                <span class="s5"># no C layer between which will convert the second parameter</span>
+                <span class="s5"># from byref() to pointer().</span>
+                <span class="s1">conn = self.__connections[itf]</span>
+                <span class="s1">result = conn.IUnknown_QueryInterface(</span><span class="s0">None, </span><span class="s1">pointer(IConnectionPoint._iid_)</span><span class="s0">, </span><span class="s1">ppcp)</span>
+                <span class="s1">logger.debug(</span><span class="s2">&quot;connectionpoint found, QI() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">result)</span>
+                <span class="s0">return </span><span class="s1">result</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;No connectionpoint found&quot;</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">CONNECT_E_NOCONNECTION</span>
+
+    <span class="s0">def </span><span class="s1">Fire_Event(self</span><span class="s0">, </span><span class="s1">itf</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s5"># Fire event 'name' with arguments *args and **kw.</span>
+        <span class="s5"># Accepts either an interface index or an interface as first argument.</span>
+        <span class="s5"># Returns a list of results.</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;Fire_Event(%s, %s, *%s, **%s)&quot;</span><span class="s0">, </span><span class="s1">itf</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">args</span><span class="s0">, </span><span class="s1">kw)</span>
+        <span class="s0">if </span><span class="s1">isinstance(itf</span><span class="s0">, </span><span class="s1">int):</span>
+            <span class="s1">itf = self._outgoing_interfaces_[itf]</span>
+        <span class="s0">return </span><span class="s1">self.__connections[itf]._call_sinks(name</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>localserver.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+localserver.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">import </span><span class="s1">comtypes</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes.server </span><span class="s0">import </span><span class="s1">IClassFactory</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">0</span><span class="s1">):</span>
+    <span class="s0">import </span><span class="s1">queue</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">Queue </span><span class="s0">as </span><span class="s1">queue</span>
+
+<span class="s1">logger = logging.getLogger(__name__)</span>
+<span class="s1">_debug = logger.debug</span>
+
+<span class="s1">REGCLS_SINGLEUSE = </span><span class="s2">0       </span><span class="s3"># class object only generates one instance</span>
+<span class="s1">REGCLS_MULTIPLEUSE = </span><span class="s2">1     </span><span class="s3"># same class object genereates multiple inst.</span>
+<span class="s1">REGCLS_MULTI_SEPARATE = </span><span class="s2">2  </span><span class="s3"># multiple use, but separate control over each</span>
+<span class="s1">REGCLS_SUSPENDED      = </span><span class="s2">4  </span><span class="s3"># register it as suspended, will be activated</span>
+<span class="s1">REGCLS_SURROGATE      = </span><span class="s2">8  </span><span class="s3"># must be used when a surrogate process</span>
+
+<span class="s0">def </span><span class="s1">run(classes):</span>
+    <span class="s1">classobjects = [ClassFactory(cls) </span><span class="s0">for </span><span class="s1">cls </span><span class="s0">in </span><span class="s1">classes]</span>
+    <span class="s1">comtypes.COMObject.__run_localserver__(classobjects)</span>
+
+<span class="s0">class </span><span class="s1">ClassFactory(comtypes.COMObject):</span>
+    <span class="s1">_com_interfaces_ = [IClassFactory]</span>
+    <span class="s1">_locks = </span><span class="s2">0</span>
+    <span class="s1">_queue = </span><span class="s0">None</span>
+    <span class="s1">regcls = REGCLS_MULTIPLEUSE</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">cls</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s1">super(ClassFactory</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+        <span class="s1">self._cls = cls</span>
+        <span class="s1">self._register_class()</span>
+        <span class="s1">self._args = args</span>
+        <span class="s1">self._kw = kw</span>
+
+    <span class="s0">def </span><span class="s1">IUnknown_AddRef(self</span><span class="s0">, </span><span class="s1">this):</span>
+        <span class="s0">return </span><span class="s2">2</span>
+
+    <span class="s0">def </span><span class="s1">IUnknown_Release(self</span><span class="s0">, </span><span class="s1">this):</span>
+        <span class="s0">return </span><span class="s2">1</span>
+
+    <span class="s0">def </span><span class="s1">_register_class(self):</span>
+        <span class="s1">regcls = getattr(self._cls</span><span class="s0">, </span><span class="s4">&quot;_regcls_&quot;</span><span class="s0">, </span><span class="s1">self.regcls)</span>
+        <span class="s1">cookie = c_ulong()</span>
+        <span class="s1">ptr = self._com_pointers_[comtypes.IUnknown._iid_]</span>
+        <span class="s1">clsctx = self._cls._reg_clsctx_</span>
+        <span class="s1">clsctx &amp;= ~comtypes.CLSCTX_INPROC </span><span class="s3"># reset the inproc flags</span>
+        <span class="s1">oledll.ole32.CoRegisterClassObject(byref(comtypes.GUID(self._cls._reg_clsid_))</span><span class="s0">,</span>
+                                           <span class="s1">ptr</span><span class="s0">,</span>
+                                           <span class="s1">clsctx</span><span class="s0">,</span>
+                                           <span class="s1">regcls</span><span class="s0">,</span>
+                                           <span class="s1">byref(cookie))</span>
+        <span class="s1">self.cookie = cookie</span>
+
+    <span class="s0">def </span><span class="s1">_revoke_class(self):</span>
+        <span class="s1">oledll.ole32.CoRevokeClassObject(self.cookie)</span>
+
+    <span class="s0">def </span><span class="s1">CreateInstance(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">punkOuter</span><span class="s0">, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppv):</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;ClassFactory.CreateInstance(%s)&quot;</span><span class="s0">, </span><span class="s1">riid[</span><span class="s2">0</span><span class="s1">])</span>
+        <span class="s1">obj = self._cls(*self._args</span><span class="s0">, </span><span class="s1">**self._kw)</span>
+        <span class="s1">result = obj.IUnknown_QueryInterface(</span><span class="s0">None, </span><span class="s1">riid</span><span class="s0">, </span><span class="s1">ppv)</span>
+        <span class="s1">_debug(</span><span class="s4">&quot;CreateInstance() -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">result)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">LockServer(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">fLock):</span>
+        <span class="s0">if </span><span class="s1">fLock:</span>
+            <span class="s1">comtypes.COMObject.__server__.Lock()</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">comtypes.COMObject.__server__.Unlock()</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+</pre>
+</body>
+</html>

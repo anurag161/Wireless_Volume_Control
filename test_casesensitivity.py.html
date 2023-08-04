@@ -1,0 +1,58 @@
+<html>
+<head>
+<title>test_casesensitivity.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_casesensitivity.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">GetModule</span>
+<span class="s1">iem = GetModule(</span><span class="s2">&quot;shdocvw.dll&quot;</span><span class="s1">)</span>
+
+<span class="s0">class </span><span class="s1">TestCase(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">GetModule</span>
+        <span class="s1">iem = GetModule(</span><span class="s2">&quot;shdocvw.dll&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># IDispatch(IUnknown)</span>
+        <span class="s3"># IWebBrowser(IDispatch)</span>
+        <span class="s3"># IWebBrowserApp(IWebBrowser)</span>
+        <span class="s3"># IWebBrowser2(IWebBrowserApp)</span>
+
+<span class="s3">##        print iem.IWebBrowser2.mro()</span>
+
+        <span class="s1">self.assertTrue(issubclass(iem.IWebBrowser2</span><span class="s0">, </span><span class="s1">iem.IWebBrowserApp))</span>
+        <span class="s1">self.assertTrue(issubclass(iem.IWebBrowserApp</span><span class="s0">, </span><span class="s1">iem.IWebBrowser))</span>
+
+<span class="s3">##        print sorted(iem.IWebBrowser.__map_case__.keys())</span>
+<span class="s3">##        print &quot;=&quot; * 42</span>
+<span class="s3">##        print sorted(iem.IWebBrowserApp.__map_case__.keys())</span>
+<span class="s3">##        print &quot;=&quot; * 42</span>
+<span class="s3">##        print sorted(iem.IWebBrowser2.__map_case__.keys())</span>
+<span class="s3">##        print &quot;=&quot; * 42</span>
+
+        <span class="s3"># names in the base class __map_case__ must also appear in the</span>
+        <span class="s3"># subclass.</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">iem.IWebBrowser.__map_case__:</span>
+            <span class="s1">self.assertTrue(name </span><span class="s0">in </span><span class="s1">iem.IWebBrowserApp.__map_case__</span><span class="s0">, </span><span class="s2">&quot;%s missing&quot; </span><span class="s1">% name)</span>
+            <span class="s1">self.assertTrue(name </span><span class="s0">in </span><span class="s1">iem.IWebBrowser2.__map_case__</span><span class="s0">, </span><span class="s2">&quot;%s missing&quot; </span><span class="s1">% name)</span>
+
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">iem.IWebBrowserApp.__map_case__:</span>
+            <span class="s1">self.assertTrue(name </span><span class="s0">in </span><span class="s1">iem.IWebBrowser2.__map_case__</span><span class="s0">, </span><span class="s2">&quot;%s missing&quot; </span><span class="s1">% name)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

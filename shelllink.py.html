@@ -1,0 +1,240 @@
+<html>
+<head>
+<title>shelllink.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+shelllink.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">print_function</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">ctypes.wintypes </span><span class="s0">import </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s1">WIN32_FIND_DATAA</span><span class="s0">, </span><span class="s1">WIN32_FIND_DATAW</span><span class="s0">, </span><span class="s1">MAX_PATH</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">IUnknown</span><span class="s0">, </span><span class="s1">GUID</span><span class="s0">, </span><span class="s1">COMMETHOD</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s1">CoClass</span>
+
+<span class="s2"># for GetPath</span>
+<span class="s1">SLGP_SHORTPATH = </span><span class="s3">0x1</span>
+<span class="s1">SLGP_UNCPRIORITY = </span><span class="s3">0x2</span>
+<span class="s1">SLGP_RAWPATH = </span><span class="s3">0x4</span>
+
+<span class="s2"># for SetShowCmd, GetShowCmd</span>
+<span class="s2">##SW_SHOWNORMAL</span>
+<span class="s2">##SW_SHOWMAXIMIZED</span>
+<span class="s2">##SW_SHOWMINNOACTIVE</span>
+
+
+<span class="s2"># for Resolve</span>
+<span class="s2">##SLR_INVOKE_MSI</span>
+<span class="s2">##SLR_NOLINKINFO</span>
+<span class="s2">##SLR_NO_UI</span>
+<span class="s2">##SLR_NOUPDATE</span>
+<span class="s2">##SLR_NOSEARCH</span>
+<span class="s2">##SLR_NOTRACK</span>
+<span class="s2">##SLR_UPDATE</span>
+
+<span class="s2"># fake these...</span>
+<span class="s1">ITEMIDLIST = c_int</span>
+<span class="s1">LPITEMIDLIST = LPCITEMIDLIST = POINTER(ITEMIDLIST)</span>
+
+<span class="s0">class </span><span class="s1">IShellLinkA(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{000214EE-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetPath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszFile' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(WIN32_FIND_DATAA)</span><span class="s0">, </span><span class="s4">'pfd' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'fFlags' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetIDList'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(LPITEMIDLIST)</span><span class="s0">, </span><span class="s4">'ppidl' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetIDList'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">LPCITEMIDLIST</span><span class="s0">, </span><span class="s4">'pidl' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetDescription'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszName' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxName' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetDescription'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszName' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetWorkingDirectory'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszDir' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetWorkingDirectory'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszDir' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetArguments'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszArgs' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetArguments'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszArgs' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propget'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Hotkey'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_short)</span><span class="s0">, </span><span class="s4">'pwHotkey' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propput'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Hotkey'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_short</span><span class="s0">, </span><span class="s4">'pwHotkey' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propget'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'ShowCmd'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_int)</span><span class="s0">, </span><span class="s4">'piShowCmd' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propput'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'ShowCmd'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'piShowCmd' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetIconLocation'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_int)</span><span class="s0">, </span><span class="s4">'piIcon' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetIconLocation'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'iIcon' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetRelativePath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszPathRel' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'dwReserved' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Resolve'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'hwnd' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'fFlags' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetPath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_char_p</span><span class="s0">, </span><span class="s4">'pszFile' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">GetPath(self</span><span class="s0">, </span><span class="s1">flags=SLGP_SHORTPATH):</span>
+        <span class="s1">buf = create_string_buffer(MAX_PATH)</span>
+        <span class="s2"># We're not interested in WIN32_FIND_DATA</span>
+        <span class="s1">self.__com_GetPath(buf</span><span class="s0">, </span><span class="s1">MAX_PATH</span><span class="s0">, None, </span><span class="s1">flags)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetDescription(self):</span>
+        <span class="s1">buf = create_string_buffer(</span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s1">self.__com_GetDescription(buf</span><span class="s0">, </span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetWorkingDirectory(self):</span>
+        <span class="s1">buf = create_string_buffer(MAX_PATH)</span>
+        <span class="s1">self.__com_GetWorkingDirectory(buf</span><span class="s0">, </span><span class="s1">MAX_PATH)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetArguments(self):</span>
+        <span class="s1">buf = create_string_buffer(</span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s1">self.__com_GetArguments(buf</span><span class="s0">, </span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetIconLocation(self):</span>
+        <span class="s1">iIcon = c_int()</span>
+        <span class="s1">buf = create_string_buffer(MAX_PATH)</span>
+        <span class="s1">self.__com_GetIconLocation(buf</span><span class="s0">, </span><span class="s1">MAX_PATH</span><span class="s0">, </span><span class="s1">byref(iIcon))</span>
+        <span class="s0">return </span><span class="s1">buf.value</span><span class="s0">, </span><span class="s1">iIcon.value</span>
+
+<span class="s0">class </span><span class="s1">IShellLinkW(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{000214F9-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetPath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszFile' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(WIN32_FIND_DATAW)</span><span class="s0">, </span><span class="s4">'pfd' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'fFlags' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetIDList'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(LPITEMIDLIST)</span><span class="s0">, </span><span class="s4">'ppidl' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetIDList'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">LPCITEMIDLIST</span><span class="s0">, </span><span class="s4">'pidl' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetDescription'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszName' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxName' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetDescription'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszName' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetWorkingDirectory'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszDir' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetWorkingDirectory'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszDir' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetArguments'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszArgs' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchMaxPath' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetArguments'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszArgs' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propget'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Hotkey'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_short)</span><span class="s0">, </span><span class="s4">'pwHotkey' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propput'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Hotkey'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_short</span><span class="s0">, </span><span class="s4">'pwHotkey' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propget'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'ShowCmd'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'retval'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_int)</span><span class="s0">, </span><span class="s4">'piShowCmd' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([</span><span class="s4">'propput'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'ShowCmd'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'piShowCmd' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'GetIconLocation'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'cchIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s0">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">POINTER(c_int)</span><span class="s0">, </span><span class="s4">'piIcon' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetIconLocation'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszIconPath' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'iIcon' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetRelativePath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszPathRel' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'dwReserved' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'Resolve'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_int</span><span class="s0">, </span><span class="s4">'hwnd' </span><span class="s1">)</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">DWORD</span><span class="s0">, </span><span class="s4">'fFlags' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s0">, </span><span class="s1">HRESULT</span><span class="s0">, </span><span class="s4">'SetPath'</span><span class="s0">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s0">, </span><span class="s1">c_wchar_p</span><span class="s0">, </span><span class="s4">'pszFile' </span><span class="s1">))</span><span class="s0">,</span>
+        <span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">GetPath(self</span><span class="s0">, </span><span class="s1">flags=SLGP_SHORTPATH):</span>
+        <span class="s1">buf = create_unicode_buffer(MAX_PATH)</span>
+        <span class="s2"># We're not interested in WIN32_FIND_DATA</span>
+        <span class="s1">self.__com_GetPath(buf</span><span class="s0">, </span><span class="s1">MAX_PATH</span><span class="s0">, None, </span><span class="s1">flags)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetDescription(self):</span>
+        <span class="s1">buf = create_unicode_buffer(</span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s1">self.__com_GetDescription(buf</span><span class="s0">, </span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetWorkingDirectory(self):</span>
+        <span class="s1">buf = create_unicode_buffer(MAX_PATH)</span>
+        <span class="s1">self.__com_GetWorkingDirectory(buf</span><span class="s0">, </span><span class="s1">MAX_PATH)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetArguments(self):</span>
+        <span class="s1">buf = create_unicode_buffer(</span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s1">self.__com_GetArguments(buf</span><span class="s0">, </span><span class="s3">1024</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">buf.value</span>
+
+    <span class="s0">def </span><span class="s1">GetIconLocation(self):</span>
+        <span class="s1">iIcon = c_int()</span>
+        <span class="s1">buf = create_unicode_buffer(MAX_PATH)</span>
+        <span class="s1">self.__com_GetIconLocation(buf</span><span class="s0">, </span><span class="s1">MAX_PATH</span><span class="s0">, </span><span class="s1">byref(iIcon))</span>
+        <span class="s0">return </span><span class="s1">buf.value</span><span class="s0">, </span><span class="s1">iIcon.value</span>
+
+<span class="s0">class </span><span class="s1">ShellLink(CoClass):</span>
+    <span class="s5">&quot;&quot;&quot;ShellLink class&quot;&quot;&quot;</span>
+    <span class="s1">_reg_clsid_ = GUID(</span><span class="s4">'{00021401-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_com_interfaces_ = [IShellLinkW</span><span class="s0">, </span><span class="s1">IShellLinkA]</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s4">&quot;__main__&quot;</span><span class="s1">:</span>
+
+    <span class="s0">import </span><span class="s1">sys</span>
+    <span class="s0">import </span><span class="s1">comtypes</span>
+    <span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span>
+    <span class="s0">from </span><span class="s1">comtypes.persist </span><span class="s0">import </span><span class="s1">IPersistFile</span>
+
+
+
+    <span class="s1">shortcut = CreateObject(ShellLink)</span>
+    <span class="s1">print(shortcut)</span>
+    <span class="s2">##help(shortcut)</span>
+
+    <span class="s1">shortcut.SetPath(sys.executable)</span>
+
+    <span class="s1">shortcut.SetDescription(</span><span class="s4">&quot;Python %s&quot; </span><span class="s1">% sys.version)</span>
+    <span class="s1">shortcut.SetIconLocation(sys.executable</span><span class="s0">, </span><span class="s3">1</span><span class="s1">)</span>
+
+    <span class="s1">print(shortcut.GetPath(</span><span class="s3">2</span><span class="s1">))</span>
+    <span class="s1">print(shortcut.GetIconLocation())</span>
+
+    <span class="s1">pf = shortcut.QueryInterface(IPersistFile)</span>
+    <span class="s1">pf.Save(</span><span class="s4">&quot;foo.lnk&quot;</span><span class="s0">, True</span><span class="s1">)</span>
+    <span class="s1">print(pf.GetCurFile())</span>
+</pre>
+</body>
+</html>

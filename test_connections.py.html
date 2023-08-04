@@ -1,0 +1,576 @@
+<html>
+<head>
+<title>test_connections.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_connections.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;Tests for net_connections() and Process.connections() APIs.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">socket</span>
+<span class="s3">import </span><span class="s1">textwrap</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+<span class="s3">from </span><span class="s1">contextlib </span><span class="s3">import </span><span class="s1">closing</span>
+<span class="s3">from </span><span class="s1">socket </span><span class="s3">import </span><span class="s1">AF_INET</span>
+<span class="s3">from </span><span class="s1">socket </span><span class="s3">import </span><span class="s1">AF_INET6</span>
+<span class="s3">from </span><span class="s1">socket </span><span class="s3">import </span><span class="s1">SOCK_DGRAM</span>
+<span class="s3">from </span><span class="s1">socket </span><span class="s3">import </span><span class="s1">SOCK_STREAM</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">FREEBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">LINUX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">MACOS</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">NETBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">OPENBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">POSIX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">SUNOS</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">WINDOWS</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">supports_ipv6</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">PY3</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">AF_UNIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_CONNECTIONS_UNIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">SKIP_SYSCONS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">bind_socket</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">bind_unix_socket</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">check_connection_ntuple</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">create_sockets</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">reap_children</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry_on_failure</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">serialrun</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">skip_on_access_denied</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">tcp_socketpair</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">unix_socketpair</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">wait_for_file</span>
+
+
+<span class="s1">thisproc = psutil.Process()</span>
+<span class="s1">SOCK_SEQPACKET = getattr(socket</span><span class="s3">, </span><span class="s4">&quot;SOCK_SEQPACKET&quot;</span><span class="s3">, </span><span class="s1">object())</span>
+
+
+<span class="s1">@serialrun</span>
+<span class="s3">class </span><span class="s1">ConnectionTestCase(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">setUp(self):</span>
+        <span class="s3">if not </span><span class="s1">(NETBSD </span><span class="s3">or </span><span class="s1">FREEBSD):</span>
+            <span class="s0"># process opens a UNIX socket to /var/log/run.</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'all'</span><span class="s1">)</span>
+            <span class="s3">assert not </span><span class="s1">cons</span><span class="s3">, </span><span class="s1">cons</span>
+
+    <span class="s3">def </span><span class="s1">tearDown(self):</span>
+        <span class="s3">if not </span><span class="s1">(FREEBSD </span><span class="s3">or </span><span class="s1">NETBSD):</span>
+            <span class="s0"># Make sure we closed all resources.</span>
+            <span class="s0"># NetBSD opens a UNIX socket to /var/log/run.</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'all'</span><span class="s1">)</span>
+            <span class="s3">assert not </span><span class="s1">cons</span><span class="s3">, </span><span class="s1">cons</span>
+
+    <span class="s3">def </span><span class="s1">compare_procsys_connections(self</span><span class="s3">, </span><span class="s1">pid</span><span class="s3">, </span><span class="s1">proc_cons</span><span class="s3">, </span><span class="s1">kind=</span><span class="s4">'all'</span><span class="s1">):</span>
+        <span class="s2">&quot;&quot;&quot;Given a process PID and its list of connections compare 
+        those against system-wide connections retrieved via 
+        psutil.net_connections. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">sys_cons = psutil.net_connections(kind=kind)</span>
+        <span class="s3">except </span><span class="s1">psutil.AccessDenied:</span>
+            <span class="s0"># On MACOS, system-wide connections are retrieved by iterating</span>
+            <span class="s0"># over all processes</span>
+            <span class="s3">if </span><span class="s1">MACOS:</span>
+                <span class="s3">return</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise</span>
+        <span class="s0"># Filter for this proc PID and exlucde PIDs from the tuple.</span>
+        <span class="s1">sys_cons = [c[:-</span><span class="s5">1</span><span class="s1">] </span><span class="s3">for </span><span class="s1">c </span><span class="s3">in </span><span class="s1">sys_cons </span><span class="s3">if </span><span class="s1">c.pid == pid]</span>
+        <span class="s1">sys_cons.sort()</span>
+        <span class="s1">proc_cons.sort()</span>
+        <span class="s1">self.assertEqual(proc_cons</span><span class="s3">, </span><span class="s1">sys_cons)</span>
+
+
+<span class="s3">class </span><span class="s1">TestBasicOperations(ConnectionTestCase):</span>
+
+    <span class="s1">@unittest.skipIf(SKIP_SYSCONS</span><span class="s3">, </span><span class="s4">&quot;requires root&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_system(self):</span>
+        <span class="s3">with </span><span class="s1">create_sockets():</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">psutil.net_connections(kind=</span><span class="s4">'all'</span><span class="s1">):</span>
+                <span class="s1">check_connection_ntuple(conn)</span>
+
+    <span class="s3">def </span><span class="s1">test_process(self):</span>
+        <span class="s3">with </span><span class="s1">create_sockets():</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">psutil.Process().connections(kind=</span><span class="s4">'all'</span><span class="s1">):</span>
+                <span class="s1">check_connection_ntuple(conn)</span>
+
+    <span class="s3">def </span><span class="s1">test_invalid_kind(self):</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">thisproc.connections</span><span class="s3">, </span><span class="s1">kind=</span><span class="s4">'???'</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">psutil.net_connections</span><span class="s3">, </span><span class="s1">kind=</span><span class="s4">'???'</span><span class="s1">)</span>
+
+
+<span class="s1">@serialrun</span>
+<span class="s3">class </span><span class="s1">TestUnconnectedSockets(ConnectionTestCase):</span>
+    <span class="s2">&quot;&quot;&quot;Tests sockets which are open but not connected to anything.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">get_conn_from_sock(self</span><span class="s3">, </span><span class="s1">sock):</span>
+        <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'all'</span><span class="s1">)</span>
+        <span class="s1">smap = dict([(c.fd</span><span class="s3">, </span><span class="s1">c) </span><span class="s3">for </span><span class="s1">c </span><span class="s3">in </span><span class="s1">cons])</span>
+        <span class="s3">if </span><span class="s1">NETBSD </span><span class="s3">or </span><span class="s1">FREEBSD:</span>
+            <span class="s0"># NetBSD opens a UNIX socket to /var/log/run</span>
+            <span class="s0"># so there may be more connections.</span>
+            <span class="s3">return </span><span class="s1">smap[sock.fileno()]</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">cons[</span><span class="s5">0</span><span class="s1">].fd != -</span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s1">self.assertEqual(smap[sock.fileno()].fd</span><span class="s3">, </span><span class="s1">sock.fileno())</span>
+            <span class="s3">return </span><span class="s1">cons[</span><span class="s5">0</span><span class="s1">]</span>
+
+    <span class="s3">def </span><span class="s1">check_socket(self</span><span class="s3">, </span><span class="s1">sock):</span>
+        <span class="s2">&quot;&quot;&quot;Given a socket, makes sure it matches the one obtained 
+        via psutil. It assumes this process created one connection 
+        only (the one supposed to be checked). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">conn = self.get_conn_from_sock(sock)</span>
+        <span class="s1">check_connection_ntuple(conn)</span>
+
+        <span class="s0"># fd, family, type</span>
+        <span class="s3">if </span><span class="s1">conn.fd != -</span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s1">self.assertEqual(conn.fd</span><span class="s3">, </span><span class="s1">sock.fileno())</span>
+        <span class="s1">self.assertEqual(conn.family</span><span class="s3">, </span><span class="s1">sock.family)</span>
+        <span class="s0"># see: http://bugs.python.org/issue30204</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">conn.type</span><span class="s3">, </span><span class="s1">sock.getsockopt(socket.SOL_SOCKET</span><span class="s3">, </span><span class="s1">socket.SO_TYPE))</span>
+
+        <span class="s0"># local address</span>
+        <span class="s1">laddr = sock.getsockname()</span>
+        <span class="s3">if not </span><span class="s1">laddr </span><span class="s3">and </span><span class="s1">PY3 </span><span class="s3">and </span><span class="s1">isinstance(laddr</span><span class="s3">, </span><span class="s1">bytes):</span>
+            <span class="s0"># See: http://bugs.python.org/issue30205</span>
+            <span class="s1">laddr = laddr.decode()</span>
+        <span class="s3">if </span><span class="s1">sock.family == AF_INET6:</span>
+            <span class="s1">laddr = laddr[:</span><span class="s5">2</span><span class="s1">]</span>
+        <span class="s3">if </span><span class="s1">sock.family == AF_UNIX </span><span class="s3">and </span><span class="s1">OPENBSD:</span>
+            <span class="s0"># No addresses are set for UNIX sockets on OpenBSD.</span>
+            <span class="s3">pass</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.assertEqual(conn.laddr</span><span class="s3">, </span><span class="s1">laddr)</span>
+
+        <span class="s0"># XXX Solaris can't retrieve system-wide UNIX sockets</span>
+        <span class="s3">if </span><span class="s1">sock.family == AF_UNIX </span><span class="s3">and </span><span class="s1">HAS_CONNECTIONS_UNIX:</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'all'</span><span class="s1">)</span>
+            <span class="s1">self.compare_procsys_connections(os.getpid()</span><span class="s3">, </span><span class="s1">cons</span><span class="s3">, </span><span class="s1">kind=</span><span class="s4">'all'</span><span class="s1">)</span>
+        <span class="s3">return </span><span class="s1">conn</span>
+
+    <span class="s3">def </span><span class="s1">test_tcp_v4(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(bind_socket(AF_INET</span><span class="s3">, </span><span class="s1">SOCK_STREAM</span><span class="s3">, </span><span class="s1">addr=addr)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_LISTEN)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">supports_ipv6()</span><span class="s3">, </span><span class="s4">&quot;IPv6 not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_tcp_v6(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;::1&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(bind_socket(AF_INET6</span><span class="s3">, </span><span class="s1">SOCK_STREAM</span><span class="s3">, </span><span class="s1">addr=addr)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_LISTEN)</span>
+
+    <span class="s3">def </span><span class="s1">test_udp_v4(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(bind_socket(AF_INET</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">addr=addr)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_NONE)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">supports_ipv6()</span><span class="s3">, </span><span class="s4">&quot;IPv6 not supported&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_udp_v6(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;::1&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(bind_socket(AF_INET6</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">addr=addr)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_NONE)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">'POSIX only'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_unix_tcp(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">closing(bind_unix_socket(testfn</span><span class="s3">, </span><span class="s1">type=SOCK_STREAM)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_NONE)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">'POSIX only'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_unix_udp(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">closing(bind_unix_socket(testfn</span><span class="s3">, </span><span class="s1">type=SOCK_STREAM)) </span><span class="s3">as </span><span class="s1">sock:</span>
+            <span class="s1">conn = self.check_socket(sock)</span>
+            <span class="s3">assert not </span><span class="s1">conn.raddr</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">psutil.CONN_NONE)</span>
+
+
+<span class="s1">@serialrun</span>
+<span class="s3">class </span><span class="s1">TestConnectedSocket(ConnectionTestCase):</span>
+    <span class="s2">&quot;&quot;&quot;Test socket pairs which are are actually connected to 
+    each other. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0"># On SunOS, even after we close() it, the server socket stays around</span>
+    <span class="s0"># in TIME_WAIT state.</span>
+    <span class="s1">@unittest.skipIf(SUNOS</span><span class="s3">, </span><span class="s4">&quot;unreliable on SUONS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_tcp(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s3">assert not </span><span class="s1">thisproc.connections(kind=</span><span class="s4">'tcp4'</span><span class="s1">)</span>
+        <span class="s1">server</span><span class="s3">, </span><span class="s1">client = tcp_socketpair(AF_INET</span><span class="s3">, </span><span class="s1">addr=addr)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'tcp4'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].status</span><span class="s3">, </span><span class="s1">psutil.CONN_ESTABLISHED)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">1</span><span class="s1">].status</span><span class="s3">, </span><span class="s1">psutil.CONN_ESTABLISHED)</span>
+            <span class="s0"># May not be fast enough to change state so it stays</span>
+            <span class="s0"># commenteed.</span>
+            <span class="s0"># client.close()</span>
+            <span class="s0"># cons = thisproc.connections(kind='all')</span>
+            <span class="s0"># self.assertEqual(len(cons), 1)</span>
+            <span class="s0"># self.assertEqual(cons[0].status, psutil.CONN_CLOSE_WAIT)</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s1">server.close()</span>
+            <span class="s1">client.close()</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">'POSIX only'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_unix(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s1">server</span><span class="s3">, </span><span class="s1">client = unix_socketpair(testfn)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'unix'</span><span class="s1">)</span>
+            <span class="s3">assert not </span><span class="s1">(cons[</span><span class="s5">0</span><span class="s1">].laddr </span><span class="s3">and </span><span class="s1">cons[</span><span class="s5">0</span><span class="s1">].raddr)</span>
+            <span class="s3">assert not </span><span class="s1">(cons[</span><span class="s5">1</span><span class="s1">].laddr </span><span class="s3">and </span><span class="s1">cons[</span><span class="s5">1</span><span class="s1">].raddr)</span>
+            <span class="s3">if </span><span class="s1">NETBSD </span><span class="s3">or </span><span class="s1">FREEBSD:</span>
+                <span class="s0"># On NetBSD creating a UNIX socket will cause</span>
+                <span class="s0"># a UNIX connection to  /var/run/log.</span>
+                <span class="s1">cons = [c </span><span class="s3">for </span><span class="s1">c </span><span class="s3">in </span><span class="s1">cons </span><span class="s3">if </span><span class="s1">c.raddr != </span><span class="s4">'/var/run/log'</span><span class="s1">]</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">msg=cons)</span>
+            <span class="s3">if </span><span class="s1">LINUX </span><span class="s3">or </span><span class="s1">FREEBSD </span><span class="s3">or </span><span class="s1">SUNOS:</span>
+                <span class="s0"># remote path is never set</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].raddr</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">1</span><span class="s1">].raddr</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s0"># one local address should though</span>
+                <span class="s1">self.assertEqual(testfn</span><span class="s3">, </span><span class="s1">cons[</span><span class="s5">0</span><span class="s1">].laddr </span><span class="s3">or </span><span class="s1">cons[</span><span class="s5">1</span><span class="s1">].laddr)</span>
+            <span class="s3">elif </span><span class="s1">OPENBSD:</span>
+                <span class="s0"># No addresses whatsoever here.</span>
+                <span class="s3">for </span><span class="s1">addr </span><span class="s3">in </span><span class="s1">(cons[</span><span class="s5">0</span><span class="s1">].laddr</span><span class="s3">, </span><span class="s1">cons[</span><span class="s5">0</span><span class="s1">].raddr</span><span class="s3">,</span>
+                             <span class="s1">cons[</span><span class="s5">1</span><span class="s1">].laddr</span><span class="s3">, </span><span class="s1">cons[</span><span class="s5">1</span><span class="s1">].raddr):</span>
+                    <span class="s1">self.assertEqual(addr</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s0"># On other systems either the laddr or raddr</span>
+                <span class="s0"># of both peers are set.</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].laddr </span><span class="s3">or </span><span class="s1">cons[</span><span class="s5">1</span><span class="s1">].laddr</span><span class="s3">, </span><span class="s1">testfn)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].raddr </span><span class="s3">or </span><span class="s1">cons[</span><span class="s5">1</span><span class="s1">].raddr</span><span class="s3">, </span><span class="s1">testfn)</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s1">server.close()</span>
+            <span class="s1">client.close()</span>
+
+
+<span class="s3">class </span><span class="s1">TestFilters(ConnectionTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_filters(self):</span>
+        <span class="s3">def </span><span class="s1">check(kind</span><span class="s3">, </span><span class="s1">families</span><span class="s3">, </span><span class="s1">types):</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">thisproc.connections(kind=kind):</span>
+                <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">families)</span>
+                <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">types)</span>
+            <span class="s3">if not </span><span class="s1">SKIP_SYSCONS:</span>
+                <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">psutil.net_connections(kind=kind):</span>
+                    <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">families)</span>
+                    <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">types)</span>
+
+        <span class="s3">with </span><span class="s1">create_sockets():</span>
+            <span class="s1">check(</span><span class="s4">'all'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6</span><span class="s3">, </span><span class="s1">AF_UNIX]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">SOCK_SEQPACKET])</span>
+            <span class="s1">check(</span><span class="s4">'inet'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM])</span>
+            <span class="s1">check(</span><span class="s4">'inet4'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM])</span>
+            <span class="s1">check(</span><span class="s4">'tcp'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM])</span>
+            <span class="s1">check(</span><span class="s4">'tcp4'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM])</span>
+            <span class="s1">check(</span><span class="s4">'tcp6'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET6]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_STREAM])</span>
+            <span class="s1">check(</span><span class="s4">'udp'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_DGRAM])</span>
+            <span class="s1">check(</span><span class="s4">'udp4'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_DGRAM])</span>
+            <span class="s1">check(</span><span class="s4">'udp6'</span><span class="s3">,</span>
+                  <span class="s1">[AF_INET6]</span><span class="s3">,</span>
+                  <span class="s1">[SOCK_DGRAM])</span>
+            <span class="s3">if </span><span class="s1">HAS_CONNECTIONS_UNIX:</span>
+                <span class="s1">check(</span><span class="s4">'unix'</span><span class="s3">,</span>
+                      <span class="s1">[AF_UNIX]</span><span class="s3">,</span>
+                      <span class="s1">[SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">SOCK_SEQPACKET])</span>
+
+    <span class="s1">@skip_on_access_denied(only_if=MACOS)</span>
+    <span class="s3">def </span><span class="s1">test_combos(self):</span>
+        <span class="s1">reap_children()</span>
+
+        <span class="s3">def </span><span class="s1">check_conn(proc</span><span class="s3">, </span><span class="s1">conn</span><span class="s3">, </span><span class="s1">family</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">, </span><span class="s1">kinds):</span>
+            <span class="s1">all_kinds = (</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;inet&quot;</span><span class="s3">, </span><span class="s4">&quot;inet4&quot;</span><span class="s3">, </span><span class="s4">&quot;inet6&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp4&quot;</span><span class="s3">,</span>
+                         <span class="s4">&quot;tcp6&quot;</span><span class="s3">, </span><span class="s4">&quot;udp&quot;</span><span class="s3">, </span><span class="s4">&quot;udp4&quot;</span><span class="s3">, </span><span class="s4">&quot;udp6&quot;</span><span class="s1">)</span>
+            <span class="s1">check_connection_ntuple(conn)</span>
+            <span class="s1">self.assertEqual(conn.family</span><span class="s3">, </span><span class="s1">family)</span>
+            <span class="s1">self.assertEqual(conn.type</span><span class="s3">, </span><span class="s1">type)</span>
+            <span class="s1">self.assertEqual(conn.laddr</span><span class="s3">, </span><span class="s1">laddr)</span>
+            <span class="s1">self.assertEqual(conn.raddr</span><span class="s3">, </span><span class="s1">raddr)</span>
+            <span class="s1">self.assertEqual(conn.status</span><span class="s3">, </span><span class="s1">status)</span>
+            <span class="s3">for </span><span class="s1">kind </span><span class="s3">in </span><span class="s1">all_kinds:</span>
+                <span class="s1">cons = proc.connections(kind=kind)</span>
+                <span class="s3">if </span><span class="s1">kind </span><span class="s3">in </span><span class="s1">kinds:</span>
+                    <span class="s3">assert </span><span class="s1">cons</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s3">assert not </span><span class="s1">cons</span><span class="s3">, </span><span class="s1">cons</span>
+            <span class="s0"># compare against system-wide connections</span>
+            <span class="s0"># XXX Solaris can't retrieve system-wide UNIX</span>
+            <span class="s0"># sockets.</span>
+            <span class="s3">if </span><span class="s1">HAS_CONNECTIONS_UNIX:</span>
+                <span class="s1">self.compare_procsys_connections(proc.pid</span><span class="s3">, </span><span class="s1">[conn])</span>
+
+        <span class="s1">tcp_template = textwrap.dedent(</span><span class="s4">&quot;&quot;&quot; 
+            import socket, time 
+            s = socket.socket({family}, socket.SOCK_STREAM) 
+            s.bind(('{addr}', 0)) 
+            s.listen(5) 
+            with open('{testfn}', 'w') as f: 
+                f.write(str(s.getsockname()[:2])) 
+            time.sleep(60) 
+            &quot;&quot;&quot;</span><span class="s1">)</span>
+
+        <span class="s1">udp_template = textwrap.dedent(</span><span class="s4">&quot;&quot;&quot; 
+            import socket, time 
+            s = socket.socket({family}, socket.SOCK_DGRAM) 
+            s.bind(('{addr}', 0)) 
+            with open('{testfn}', 'w') as f: 
+                f.write(str(s.getsockname()[:2])) 
+            time.sleep(60) 
+            &quot;&quot;&quot;</span><span class="s1">)</span>
+
+        <span class="s0"># must be relative on Windows</span>
+        <span class="s1">testfile = os.path.basename(self.get_testfn(dir=os.getcwd()))</span>
+        <span class="s1">tcp4_template = tcp_template.format(</span>
+            <span class="s1">family=int(AF_INET)</span><span class="s3">, </span><span class="s1">addr=</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s1">testfn=testfile)</span>
+        <span class="s1">udp4_template = udp_template.format(</span>
+            <span class="s1">family=int(AF_INET)</span><span class="s3">, </span><span class="s1">addr=</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s1">testfn=testfile)</span>
+        <span class="s1">tcp6_template = tcp_template.format(</span>
+            <span class="s1">family=int(AF_INET6)</span><span class="s3">, </span><span class="s1">addr=</span><span class="s4">&quot;::1&quot;</span><span class="s3">, </span><span class="s1">testfn=testfile)</span>
+        <span class="s1">udp6_template = udp_template.format(</span>
+            <span class="s1">family=int(AF_INET6)</span><span class="s3">, </span><span class="s1">addr=</span><span class="s4">&quot;::1&quot;</span><span class="s3">, </span><span class="s1">testfn=testfile)</span>
+
+        <span class="s0"># launch various subprocess instantiating a socket of various</span>
+        <span class="s0"># families and types to enrich psutil results</span>
+        <span class="s1">tcp4_proc = self.pyrun(tcp4_template)</span>
+        <span class="s1">tcp4_addr = eval(wait_for_file(testfile</span><span class="s3">, </span><span class="s1">delete=</span><span class="s3">True</span><span class="s1">))</span>
+        <span class="s1">udp4_proc = self.pyrun(udp4_template)</span>
+        <span class="s1">udp4_addr = eval(wait_for_file(testfile</span><span class="s3">, </span><span class="s1">delete=</span><span class="s3">True</span><span class="s1">))</span>
+        <span class="s3">if </span><span class="s1">supports_ipv6():</span>
+            <span class="s1">tcp6_proc = self.pyrun(tcp6_template)</span>
+            <span class="s1">tcp6_addr = eval(wait_for_file(testfile</span><span class="s3">, </span><span class="s1">delete=</span><span class="s3">True</span><span class="s1">))</span>
+            <span class="s1">udp6_proc = self.pyrun(udp6_template)</span>
+            <span class="s1">udp6_addr = eval(wait_for_file(testfile</span><span class="s3">, </span><span class="s1">delete=</span><span class="s3">True</span><span class="s1">))</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">tcp6_proc = </span><span class="s3">None</span>
+            <span class="s1">udp6_proc = </span><span class="s3">None</span>
+            <span class="s1">tcp6_addr = </span><span class="s3">None</span>
+            <span class="s1">udp6_addr = </span><span class="s3">None</span>
+
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">thisproc.children():</span>
+            <span class="s1">cons = p.connections()</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s0"># TCP v4</span>
+                <span class="s3">if </span><span class="s1">p.pid == tcp4_proc.pid:</span>
+                    <span class="s1">check_conn(p</span><span class="s3">, </span><span class="s1">conn</span><span class="s3">, </span><span class="s1">AF_INET</span><span class="s3">, </span><span class="s1">SOCK_STREAM</span><span class="s3">, </span><span class="s1">tcp4_addr</span><span class="s3">, </span><span class="s1">()</span><span class="s3">,</span>
+                               <span class="s1">psutil.CONN_LISTEN</span><span class="s3">,</span>
+                               <span class="s1">(</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;inet&quot;</span><span class="s3">, </span><span class="s4">&quot;inet4&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp4&quot;</span><span class="s1">))</span>
+                <span class="s0"># UDP v4</span>
+                <span class="s3">elif </span><span class="s1">p.pid == udp4_proc.pid:</span>
+                    <span class="s1">check_conn(p</span><span class="s3">, </span><span class="s1">conn</span><span class="s3">, </span><span class="s1">AF_INET</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">udp4_addr</span><span class="s3">, </span><span class="s1">()</span><span class="s3">,</span>
+                               <span class="s1">psutil.CONN_NONE</span><span class="s3">,</span>
+                               <span class="s1">(</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;inet&quot;</span><span class="s3">, </span><span class="s4">&quot;inet4&quot;</span><span class="s3">, </span><span class="s4">&quot;udp&quot;</span><span class="s3">, </span><span class="s4">&quot;udp4&quot;</span><span class="s1">))</span>
+                <span class="s0"># TCP v6</span>
+                <span class="s3">elif </span><span class="s1">p.pid == getattr(tcp6_proc</span><span class="s3">, </span><span class="s4">&quot;pid&quot;</span><span class="s3">, None</span><span class="s1">):</span>
+                    <span class="s1">check_conn(p</span><span class="s3">, </span><span class="s1">conn</span><span class="s3">, </span><span class="s1">AF_INET6</span><span class="s3">, </span><span class="s1">SOCK_STREAM</span><span class="s3">, </span><span class="s1">tcp6_addr</span><span class="s3">, </span><span class="s1">()</span><span class="s3">,</span>
+                               <span class="s1">psutil.CONN_LISTEN</span><span class="s3">,</span>
+                               <span class="s1">(</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;inet&quot;</span><span class="s3">, </span><span class="s4">&quot;inet6&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp&quot;</span><span class="s3">, </span><span class="s4">&quot;tcp6&quot;</span><span class="s1">))</span>
+                <span class="s0"># UDP v6</span>
+                <span class="s3">elif </span><span class="s1">p.pid == getattr(udp6_proc</span><span class="s3">, </span><span class="s4">&quot;pid&quot;</span><span class="s3">, None</span><span class="s1">):</span>
+                    <span class="s1">check_conn(p</span><span class="s3">, </span><span class="s1">conn</span><span class="s3">, </span><span class="s1">AF_INET6</span><span class="s3">, </span><span class="s1">SOCK_DGRAM</span><span class="s3">, </span><span class="s1">udp6_addr</span><span class="s3">, </span><span class="s1">()</span><span class="s3">,</span>
+                               <span class="s1">psutil.CONN_NONE</span><span class="s3">,</span>
+                               <span class="s1">(</span><span class="s4">&quot;all&quot;</span><span class="s3">, </span><span class="s4">&quot;inet&quot;</span><span class="s3">, </span><span class="s4">&quot;inet6&quot;</span><span class="s3">, </span><span class="s4">&quot;udp&quot;</span><span class="s3">, </span><span class="s4">&quot;udp6&quot;</span><span class="s1">))</span>
+
+    <span class="s3">def </span><span class="s1">test_count(self):</span>
+        <span class="s3">with </span><span class="s1">create_sockets():</span>
+            <span class="s0"># tcp</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'tcp'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">2 </span><span class="s3">if </span><span class="s1">supports_ipv6() </span><span class="s3">else </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">(AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6))</span>
+                <span class="s1">self.assertEqual(conn.type</span><span class="s3">, </span><span class="s1">SOCK_STREAM)</span>
+            <span class="s0"># tcp4</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'tcp4'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].family</span><span class="s3">, </span><span class="s1">AF_INET)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].type</span><span class="s3">, </span><span class="s1">SOCK_STREAM)</span>
+            <span class="s0"># tcp6</span>
+            <span class="s3">if </span><span class="s1">supports_ipv6():</span>
+                <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'tcp6'</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].family</span><span class="s3">, </span><span class="s1">AF_INET6)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].type</span><span class="s3">, </span><span class="s1">SOCK_STREAM)</span>
+            <span class="s0"># udp</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'udp'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">2 </span><span class="s3">if </span><span class="s1">supports_ipv6() </span><span class="s3">else </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">(AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6))</span>
+                <span class="s1">self.assertEqual(conn.type</span><span class="s3">, </span><span class="s1">SOCK_DGRAM)</span>
+            <span class="s0"># udp4</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'udp4'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].family</span><span class="s3">, </span><span class="s1">AF_INET)</span>
+            <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].type</span><span class="s3">, </span><span class="s1">SOCK_DGRAM)</span>
+            <span class="s0"># udp6</span>
+            <span class="s3">if </span><span class="s1">supports_ipv6():</span>
+                <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'udp6'</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].family</span><span class="s3">, </span><span class="s1">AF_INET6)</span>
+                <span class="s1">self.assertEqual(cons[</span><span class="s5">0</span><span class="s1">].type</span><span class="s3">, </span><span class="s1">SOCK_DGRAM)</span>
+            <span class="s0"># inet</span>
+            <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'inet'</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">4 </span><span class="s3">if </span><span class="s1">supports_ipv6() </span><span class="s3">else </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">(AF_INET</span><span class="s3">, </span><span class="s1">AF_INET6))</span>
+                <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">(SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM))</span>
+            <span class="s0"># inet6</span>
+            <span class="s3">if </span><span class="s1">supports_ipv6():</span>
+                <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'inet6'</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+                <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                    <span class="s1">self.assertEqual(conn.family</span><span class="s3">, </span><span class="s1">AF_INET6)</span>
+                    <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">(SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM))</span>
+            <span class="s0"># Skipped on BSD becayse by default the Python process</span>
+            <span class="s0"># creates a UNIX socket to '/var/run/log'.</span>
+            <span class="s3">if </span><span class="s1">HAS_CONNECTIONS_UNIX </span><span class="s3">and not </span><span class="s1">(FREEBSD </span><span class="s3">or </span><span class="s1">NETBSD):</span>
+                <span class="s1">cons = thisproc.connections(kind=</span><span class="s4">'unix'</span><span class="s1">)</span>
+                <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+                <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                    <span class="s1">self.assertEqual(conn.family</span><span class="s3">, </span><span class="s1">AF_UNIX)</span>
+                    <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">(SOCK_STREAM</span><span class="s3">, </span><span class="s1">SOCK_DGRAM))</span>
+
+
+<span class="s1">@unittest.skipIf(SKIP_SYSCONS</span><span class="s3">, </span><span class="s4">&quot;requires root&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestSystemWideConnections(ConnectionTestCase):</span>
+    <span class="s2">&quot;&quot;&quot;Tests for net_connections().&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">test_it(self):</span>
+        <span class="s3">def </span><span class="s1">check(cons</span><span class="s3">, </span><span class="s1">families</span><span class="s3">, </span><span class="s1">types_):</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s1">self.assertIn(conn.family</span><span class="s3">, </span><span class="s1">families</span><span class="s3">, </span><span class="s1">msg=conn)</span>
+                <span class="s3">if </span><span class="s1">conn.family != AF_UNIX:</span>
+                    <span class="s1">self.assertIn(conn.type</span><span class="s3">, </span><span class="s1">types_</span><span class="s3">, </span><span class="s1">msg=conn)</span>
+                <span class="s1">check_connection_ntuple(conn)</span>
+
+        <span class="s3">with </span><span class="s1">create_sockets():</span>
+            <span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">conn_tmap</span>
+            <span class="s3">for </span><span class="s1">kind</span><span class="s3">, </span><span class="s1">groups </span><span class="s3">in </span><span class="s1">conn_tmap.items():</span>
+                <span class="s0"># XXX: SunOS does not retrieve UNIX sockets.</span>
+                <span class="s3">if </span><span class="s1">kind == </span><span class="s4">'unix' </span><span class="s3">and not </span><span class="s1">HAS_CONNECTIONS_UNIX:</span>
+                    <span class="s3">continue</span>
+                <span class="s1">families</span><span class="s3">, </span><span class="s1">types_ = groups</span>
+                <span class="s1">cons = psutil.net_connections(kind)</span>
+                <span class="s1">self.assertEqual(len(cons)</span><span class="s3">, </span><span class="s1">len(set(cons)))</span>
+                <span class="s1">check(cons</span><span class="s3">, </span><span class="s1">families</span><span class="s3">, </span><span class="s1">types_)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_multi_sockets_procs(self):</span>
+        <span class="s0"># Creates multiple sub processes, each creating different</span>
+        <span class="s0"># sockets. For each process check that proc.connections()</span>
+        <span class="s0"># and net_connections() return the same results.</span>
+        <span class="s0"># This is done mainly to check whether net_connections()'s</span>
+        <span class="s0"># pid is properly set, see:</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/issues/1013</span>
+        <span class="s3">with </span><span class="s1">create_sockets() </span><span class="s3">as </span><span class="s1">socks:</span>
+            <span class="s1">expected = len(socks)</span>
+        <span class="s1">pids = []</span>
+        <span class="s1">times = </span><span class="s5">10</span>
+        <span class="s1">fnames = []</span>
+        <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range(times):</span>
+            <span class="s1">fname = self.get_testfn()</span>
+            <span class="s1">fnames.append(fname)</span>
+            <span class="s1">src = textwrap.dedent(</span><span class="s4">&quot;&quot;&quot;</span><span class="s3">\ 
+                </span><span class="s4">import time, os 
+                from psutil.tests import create_sockets 
+                with create_sockets(): 
+                    with open(r'%s', 'w') as f: 
+                        f.write(&quot;hello&quot;) 
+                    time.sleep(60) 
+                &quot;&quot;&quot; </span><span class="s1">% fname)</span>
+            <span class="s1">sproc = self.pyrun(src)</span>
+            <span class="s1">pids.append(sproc.pid)</span>
+
+        <span class="s0"># sync</span>
+        <span class="s3">for </span><span class="s1">fname </span><span class="s3">in </span><span class="s1">fnames:</span>
+            <span class="s1">wait_for_file(fname)</span>
+
+        <span class="s1">syscons = [x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.net_connections(kind=</span><span class="s4">'all'</span><span class="s1">) </span><span class="s3">if </span><span class="s1">x.pid</span>
+                   <span class="s3">in </span><span class="s1">pids]</span>
+        <span class="s3">for </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">pids:</span>
+            <span class="s1">self.assertEqual(len([x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">syscons </span><span class="s3">if </span><span class="s1">x.pid == pid])</span><span class="s3">,</span>
+                             <span class="s1">expected)</span>
+            <span class="s1">p = psutil.Process(pid)</span>
+            <span class="s1">self.assertEqual(len(p.connections(</span><span class="s4">'all'</span><span class="s1">))</span><span class="s3">, </span><span class="s1">expected)</span>
+
+
+<span class="s3">class </span><span class="s1">TestMisc(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_connection_constants(self):</span>
+        <span class="s1">ints = []</span>
+        <span class="s1">strs = []</span>
+        <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">dir(psutil):</span>
+            <span class="s3">if </span><span class="s1">name.startswith(</span><span class="s4">'CONN_'</span><span class="s1">):</span>
+                <span class="s1">num = getattr(psutil</span><span class="s3">, </span><span class="s1">name)</span>
+                <span class="s1">str_ = str(num)</span>
+                <span class="s3">assert </span><span class="s1">str_.isupper()</span><span class="s3">, </span><span class="s1">str_</span>
+                <span class="s1">self.assertNotIn(str</span><span class="s3">, </span><span class="s1">strs)</span>
+                <span class="s1">self.assertNotIn(num</span><span class="s3">, </span><span class="s1">ints)</span>
+                <span class="s1">ints.append(num)</span>
+                <span class="s1">strs.append(str_)</span>
+        <span class="s3">if </span><span class="s1">SUNOS:</span>
+            <span class="s1">psutil.CONN_IDLE</span>
+            <span class="s1">psutil.CONN_BOUND</span>
+        <span class="s3">if </span><span class="s1">WINDOWS:</span>
+            <span class="s1">psutil.CONN_DELETE_TCB</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s4">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

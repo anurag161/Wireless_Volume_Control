@@ -1,0 +1,200 @@
+<html>
+<head>
+<title>callbacks.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+callbacks.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">pointer</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMObject</span>
+
+<span class="s0">from </span><span class="s1">pycaw.api.audiopolicy </span><span class="s0">import </span><span class="s1">(IAudioSessionControl2</span><span class="s0">, </span><span class="s1">IAudioSessionEvents</span><span class="s0">,</span>
+                                   <span class="s1">IAudioSessionNotification)</span>
+<span class="s0">from </span><span class="s1">pycaw.api.endpointvolume </span><span class="s0">import </span><span class="s1">IAudioEndpointVolumeCallback</span>
+<span class="s0">from </span><span class="s1">pycaw.utils </span><span class="s0">import </span><span class="s1">AudioSession</span>
+
+
+<span class="s0">class </span><span class="s1">AudioSessionNotification(COMObject):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Helper for audio session created callbacks. 
+ 
+    Note 
+    ---- 
+    In order for the AudioSessionNotification to work you need to play nicely 
+    by following these Windows rules: 
+    1.  Com needs to be in MTA. That is archived by defining 
+        the following flag before pycaw or comtypes are imported: 
+            sys.coinit_flags = 0 
+    2.  Get the AudioSessionManager: 
+            mgr = AudioUtilities.GetAudioSessionManager() 
+    3.  Create and register callback: 
+            MyCustomCallback(AudioSessionNotification): 
+                def on_session_created(self, new_session): 
+                    print(&quot;on_session_created&quot;) 
+            callback = MyCustomCallback() 
+            mgr.RegisterSessionNotification(callback) 
+    4.  Call the session enumerator (otherwise on_session_created wont work) 
+            mgr.GetSessionEnumerator() 
+    5.  Unregister, when you are finished: 
+            mgr.UnregisterSessionNotification(callback) 
+ 
+    Methods 
+    ------- 
+    Override the following method: 
+ 
+    def on_session_created(self, new_volume, new_mute, event_context): 
+        Is fired, when a new audio session is created. 
+            new_session : pycaw.utils.AudioSession 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_com_interfaces_ = (IAudioSessionNotification</span><span class="s0">,</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">OnSessionCreated(self</span><span class="s0">, </span><span class="s1">new_session):</span>
+        <span class="s1">ctl2 = new_session.QueryInterface(IAudioSessionControl2)</span>
+        <span class="s1">new_session = AudioSession(ctl2)</span>
+        <span class="s1">self.on_session_created(new_session)</span>
+
+    <span class="s0">def </span><span class="s1">on_session_created(self</span><span class="s0">, </span><span class="s1">new_session):</span>
+        <span class="s2">&quot;&quot;&quot;pycaw user interface&quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+
+<span class="s0">class </span><span class="s1">AudioSessionEvents(COMObject):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Helper for audio session callbacks. 
+ 
+    Methods 
+    ------- 
+    Override the following method(s): 
+ 
+    def on_simple_volume_changed(self, new_volume, new_mute, event_context): 
+        Is fired, when the audio session volume/mute changed. 
+            new_volume : float 
+                in range(0, 1) 
+            new_mute : int 
+                0, 1 
+            event_context : comtypes.GUID 
+                the guid &quot;should&quot; be unique to who made the changes. 
+                access guid str with event_context.contents 
+ 
+    def on_state_changed(self, new_state, new_state_id): 
+        Is fired, when the audio session state changed. 
+            new_state : str 
+                &quot;Inactive&quot;, &quot;Active&quot;, &quot;Expired&quot; 
+            new_state_id : int 
+                0, 1, 2 
+ 
+    def on_session_disconnected(self, disconnect_reason, disconnect_reason_id): 
+        Is fired, when the audio session disconnected &quot;hard&quot;. 
+            Mostly on_state_changed == &quot;Expired&quot; is what you are looking for. 
+            see self.AudioSessionDisconnectReason for disconnect_reason 
+            The use is similar to on_state_changed 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_com_interfaces_ = (IAudioSessionEvents</span><span class="s0">,</span><span class="s1">)</span>
+
+    <span class="s3"># ======= DECODE RETURNED INT VALUE =======</span>
+    <span class="s3"># see audiosessiontypes.h and audiopolicy.h</span>
+    <span class="s1">AudioSessionState = (</span>
+        <span class="s4">&quot;Inactive&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;Active&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;Expired&quot;</span>
+    <span class="s1">)</span>
+
+    <span class="s1">AudioSessionDisconnectReason = (</span>
+        <span class="s4">&quot;DeviceRemoval&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;ServerShutdown&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;FormatChanged&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;SessionLogoff&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;SessionDisconnected&quot;</span><span class="s0">,</span>
+        <span class="s4">&quot;ExclusiveModeOverride&quot;</span>
+    <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">OnSimpleVolumeChanged(self</span><span class="s0">, </span><span class="s1">new_volume</span><span class="s0">, </span><span class="s1">new_mute</span><span class="s0">, </span><span class="s1">event_context):</span>
+        <span class="s1">self.on_simple_volume_changed(new_volume</span><span class="s0">, </span><span class="s1">new_mute</span><span class="s0">, </span><span class="s1">event_context)</span>
+
+    <span class="s0">def </span><span class="s1">OnStateChanged(self</span><span class="s0">, </span><span class="s1">new_state_id):</span>
+        <span class="s1">new_state = self.AudioSessionState[new_state_id]</span>
+        <span class="s1">self.on_state_changed(new_state</span><span class="s0">, </span><span class="s1">new_state_id)</span>
+
+    <span class="s0">def </span><span class="s1">OnSessionDisconnected(self</span><span class="s0">, </span><span class="s1">disconnect_reason_id):</span>
+        <span class="s1">disconnect_reason = self.AudioSessionDisconnectReason[</span>
+            <span class="s1">disconnect_reason_id</span>
+        <span class="s1">]</span>
+        <span class="s1">self.on_session_disconnected(disconnect_reason</span><span class="s0">, </span><span class="s1">disconnect_reason_id)</span>
+
+    <span class="s0">def </span><span class="s1">on_simple_volume_changed(self</span><span class="s0">, </span><span class="s1">new_volume</span><span class="s0">, </span><span class="s1">new_mute</span><span class="s0">, </span><span class="s1">event_context):</span>
+        <span class="s2">&quot;&quot;&quot;pycaw user interface&quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">on_state_changed(self</span><span class="s0">, </span><span class="s1">new_state</span><span class="s0">, </span><span class="s1">new_state_id):</span>
+        <span class="s2">&quot;&quot;&quot;pycaw user interface&quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">on_session_disconnected(self</span><span class="s0">, </span><span class="s1">disconnect_reason</span><span class="s0">, </span><span class="s1">disconnect_reason_id):</span>
+        <span class="s2">&quot;&quot;&quot;pycaw user interface&quot;&quot;&quot;</span>
+        <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">AudioEndpointVolumeCallback(COMObject):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Helper for audio device callbacks. 
+ 
+    Methods 
+    ------- 
+    Override the following method: 
+ 
+    def on_notify(self, new_volume, new_mute, event_context, 
+                  channels, channel_volumes): 
+        Is fired, when the audio device volume/mute changed. 
+            new_volume : float 
+                in range(0, 1) 
+            new_mute : int 
+                0, 1 
+            event_context : comtypes.GUID 
+                the guid &quot;should&quot; be unique to who made the changes. 
+                access guid str with event_context.contents 
+            channels : int 
+                count of channels 
+            channel_volumes : list : float 
+                the channel volumes in range(0, 1) 
+                len(channel_volumes) == channels 
+    &quot;&quot;&quot;</span>
+    <span class="s1">_com_interfaces_ = (IAudioEndpointVolumeCallback</span><span class="s0">,</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">OnNotify(self</span><span class="s0">, </span><span class="s1">pNotify):</span>
+        <span class="s2">&quot;&quot;&quot;Fired by Windows, when the audio device volume/mute changed&quot;&quot;&quot;</span>
+
+        <span class="s3"># get the data of the PAUDIO_VOLUME_NOTIFICATION_DATA Structure</span>
+        <span class="s1">notify_data = pNotify.contents</span>
+
+        <span class="s1">channels = notify_data.nChannels</span>
+        <span class="s3"># _.afChannelVolumes is a c_float_Array_8 -&gt; convert to list</span>
+        <span class="s1">channel_volumes = list(notify_data.afChannelVolumes)</span>
+        <span class="s3"># remove from 8 value list everything out of channel range</span>
+        <span class="s1">channel_volumes = channel_volumes[:channels]</span>
+
+        <span class="s1">event_context = pointer(notify_data.guidEventContext)</span>
+
+        <span class="s1">self.on_notify(notify_data.fMasterVolume</span><span class="s0">, </span><span class="s1">notify_data.bMuted</span><span class="s0">,</span>
+                       <span class="s1">event_context</span><span class="s0">, </span><span class="s1">channels</span><span class="s0">, </span><span class="s1">channel_volumes)</span>
+
+    <span class="s0">def </span><span class="s1">on_notify(self</span><span class="s0">, </span><span class="s1">new_volume</span><span class="s0">, </span><span class="s1">new_mute</span><span class="s0">, </span><span class="s1">event_context</span><span class="s0">,</span>
+                  <span class="s1">channels</span><span class="s0">, </span><span class="s1">channel_volumes):</span>
+        <span class="s2">&quot;&quot;&quot;pycaw user interface&quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+</pre>
+</body>
+</html>

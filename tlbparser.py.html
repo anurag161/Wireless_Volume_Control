@@ -1,0 +1,787 @@
+<html>
+<head>
+<title>tlbparser.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tlbparser.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">print_function</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">windll</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">c_void_p</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">sizeof</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">alignment</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">automation</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">typeinfo</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMError</span>
+<span class="s0">from </span><span class="s1">comtypes.tools </span><span class="s0">import </span><span class="s1">typedesc</span>
+<span class="s0">from </span><span class="s1">comtypes.client._code_cache </span><span class="s0">import </span><span class="s1">_get_module_filename</span>
+
+
+<span class="s2"># Is the process 64-bit?</span>
+<span class="s1">is_64bits = sys.maxsize &gt; </span><span class="s3">2</span><span class="s1">**</span><span class="s3">32</span>
+
+
+<span class="s2">################################</span>
+
+<span class="s0">def </span><span class="s1">PTR(typ):</span>
+    <span class="s0">return </span><span class="s1">typedesc.PointerType(typ</span><span class="s0">,</span>
+                                <span class="s1">sizeof(c_void_p)*</span><span class="s3">8</span><span class="s0">,</span>
+                                <span class="s1">alignment(c_void_p)*</span><span class="s3">8</span><span class="s1">)</span>
+
+<span class="s2"># basic C data types, with size and alignment in bits</span>
+<span class="s1">char_type = typedesc.FundamentalType(</span><span class="s4">&quot;char&quot;</span><span class="s0">, </span><span class="s3">8</span><span class="s0">, </span><span class="s3">8</span><span class="s1">)</span>
+<span class="s1">uchar_type = typedesc.FundamentalType(</span><span class="s4">&quot;unsigned char&quot;</span><span class="s0">, </span><span class="s3">8</span><span class="s0">, </span><span class="s3">8</span><span class="s1">)</span>
+<span class="s1">wchar_t_type = typedesc.FundamentalType(</span><span class="s4">&quot;wchar_t&quot;</span><span class="s0">, </span><span class="s3">16</span><span class="s0">, </span><span class="s3">16</span><span class="s1">)</span>
+<span class="s1">short_type = typedesc.FundamentalType(</span><span class="s4">&quot;short int&quot;</span><span class="s0">, </span><span class="s3">16</span><span class="s0">, </span><span class="s3">16</span><span class="s1">)</span>
+<span class="s1">ushort_type = typedesc.FundamentalType(</span><span class="s4">&quot;short unsigned int&quot;</span><span class="s0">, </span><span class="s3">16</span><span class="s0">, </span><span class="s3">16</span><span class="s1">)</span>
+<span class="s1">int_type = typedesc.FundamentalType(</span><span class="s4">&quot;int&quot;</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+<span class="s1">uint_type = typedesc.FundamentalType(</span><span class="s4">&quot;unsigned int&quot;</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+<span class="s1">long_type = typedesc.FundamentalType(</span><span class="s4">&quot;long int&quot;</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+<span class="s1">ulong_type = typedesc.FundamentalType(</span><span class="s4">&quot;long unsigned int&quot;</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+<span class="s1">longlong_type = typedesc.FundamentalType(</span><span class="s4">&quot;long long int&quot;</span><span class="s0">, </span><span class="s3">64</span><span class="s0">, </span><span class="s3">64</span><span class="s1">)</span>
+<span class="s1">ulonglong_type = typedesc.FundamentalType(</span><span class="s4">&quot;long long unsigned int&quot;</span><span class="s0">, </span><span class="s3">64</span><span class="s0">, </span><span class="s3">64</span><span class="s1">)</span>
+<span class="s1">float_type = typedesc.FundamentalType(</span><span class="s4">&quot;float&quot;</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+<span class="s1">double_type = typedesc.FundamentalType(</span><span class="s4">&quot;double&quot;</span><span class="s0">, </span><span class="s3">64</span><span class="s0">, </span><span class="s3">64</span><span class="s1">)</span>
+
+<span class="s2"># basic COM data types</span>
+<span class="s1">BSTR_type = typedesc.Typedef(</span><span class="s4">&quot;BSTR&quot;</span><span class="s0">, </span><span class="s1">PTR(wchar_t_type))</span>
+<span class="s1">SCODE_type = typedesc.Typedef(</span><span class="s4">&quot;SCODE&quot;</span><span class="s0">, </span><span class="s1">int_type)</span>
+<span class="s1">VARIANT_BOOL_type = typedesc.Typedef(</span><span class="s4">&quot;VARIANT_BOOL&quot;</span><span class="s0">, </span><span class="s1">short_type)</span>
+<span class="s1">HRESULT_type = typedesc.Typedef(</span><span class="s4">&quot;HRESULT&quot;</span><span class="s0">, </span><span class="s1">ulong_type)</span>
+
+<span class="s1">VARIANT_type = typedesc.Structure(</span><span class="s4">&quot;VARIANT&quot;</span><span class="s0">,</span>
+                                  <span class="s1">align=alignment(automation.VARIANT)*</span><span class="s3">8</span><span class="s0">,</span>
+                                  <span class="s1">members=[]</span><span class="s0">, </span><span class="s1">bases=[]</span><span class="s0">,</span>
+                                  <span class="s1">size=sizeof(automation.VARIANT)*</span><span class="s3">8</span><span class="s1">)</span>
+<span class="s1">IDISPATCH_type = typedesc.Typedef(</span><span class="s4">&quot;IDispatch&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+<span class="s1">IUNKNOWN_type = typedesc.Typedef(</span><span class="s4">&quot;IUnknown&quot;</span><span class="s0">, None</span><span class="s1">)</span>
+<span class="s1">DECIMAL_type = typedesc.Structure(</span><span class="s4">&quot;DECIMAL&quot;</span><span class="s0">,</span>
+                                  <span class="s1">align=alignment(automation.DECIMAL)*</span><span class="s3">8</span><span class="s0">,</span>
+                                  <span class="s1">members=[]</span><span class="s0">, </span><span class="s1">bases=[]</span><span class="s0">,</span>
+                                  <span class="s1">size=sizeof(automation.DECIMAL)*</span><span class="s3">8</span><span class="s1">)</span>
+
+<span class="s0">def </span><span class="s1">midlSAFEARRAY(typ):</span>
+    <span class="s0">return </span><span class="s1">typedesc.SAFEARRAYType(typ)</span>
+
+<span class="s2"># faked COM data types</span>
+<span class="s1">CURRENCY_type = longlong_type </span><span class="s2"># slightly wrong; should be scaled by 10000 - use subclass of longlong?</span>
+<span class="s1">DATE_type = double_type </span><span class="s2"># not *that* wrong...</span>
+
+<span class="s1">COMTYPES = {</span>
+    <span class="s1">automation.VT_I2: short_type</span><span class="s0">, </span><span class="s2"># 2</span>
+    <span class="s1">automation.VT_I4: int_type</span><span class="s0">, </span><span class="s2"># 3</span>
+    <span class="s1">automation.VT_R4: float_type</span><span class="s0">, </span><span class="s2"># 4</span>
+    <span class="s1">automation.VT_R8: double_type</span><span class="s0">, </span><span class="s2"># 5</span>
+    <span class="s1">automation.VT_CY: CURRENCY_type</span><span class="s0">, </span><span class="s2"># 6</span>
+    <span class="s1">automation.VT_DATE: DATE_type</span><span class="s0">, </span><span class="s2"># 7</span>
+    <span class="s1">automation.VT_BSTR: BSTR_type</span><span class="s0">, </span><span class="s2"># 8</span>
+    <span class="s1">automation.VT_DISPATCH: PTR(IDISPATCH_type)</span><span class="s0">, </span><span class="s2"># 9</span>
+    <span class="s1">automation.VT_ERROR: SCODE_type</span><span class="s0">, </span><span class="s2"># 10</span>
+    <span class="s1">automation.VT_BOOL: VARIANT_BOOL_type</span><span class="s0">, </span><span class="s2"># 11</span>
+    <span class="s1">automation.VT_VARIANT: VARIANT_type</span><span class="s0">, </span><span class="s2"># 12</span>
+    <span class="s1">automation.VT_UNKNOWN: PTR(IUNKNOWN_type)</span><span class="s0">, </span><span class="s2"># 13</span>
+    <span class="s1">automation.VT_DECIMAL: DECIMAL_type</span><span class="s0">, </span><span class="s2"># 14</span>
+
+    <span class="s1">automation.VT_I1: char_type</span><span class="s0">, </span><span class="s2"># 16</span>
+    <span class="s1">automation.VT_UI1: uchar_type</span><span class="s0">, </span><span class="s2"># 17</span>
+    <span class="s1">automation.VT_UI2: ushort_type</span><span class="s0">, </span><span class="s2"># 18</span>
+    <span class="s1">automation.VT_UI4: ulong_type</span><span class="s0">, </span><span class="s2"># 19</span>
+    <span class="s1">automation.VT_I8: longlong_type</span><span class="s0">, </span><span class="s2"># 20</span>
+    <span class="s1">automation.VT_UI8: ulonglong_type</span><span class="s0">, </span><span class="s2"># 21</span>
+    <span class="s1">automation.VT_INT: int_type</span><span class="s0">, </span><span class="s2"># 22</span>
+    <span class="s1">automation.VT_UINT: uint_type</span><span class="s0">, </span><span class="s2"># 23</span>
+    <span class="s1">automation.VT_VOID: typedesc.FundamentalType(</span><span class="s4">&quot;void&quot;</span><span class="s0">, </span><span class="s3">0</span><span class="s0">, </span><span class="s3">0</span><span class="s1">)</span><span class="s0">, </span><span class="s2"># 24</span>
+    <span class="s1">automation.VT_HRESULT: HRESULT_type</span><span class="s0">, </span><span class="s2"># 25</span>
+    <span class="s1">automation.VT_LPSTR: PTR(char_type)</span><span class="s0">, </span><span class="s2"># 30</span>
+    <span class="s1">automation.VT_LPWSTR: PTR(wchar_t_type)</span><span class="s0">, </span><span class="s2"># 31</span>
+<span class="s1">}</span>
+
+<span class="s2">#automation.VT_PTR = 26 # below</span>
+<span class="s2">#automation.VT_SAFEARRAY = 27</span>
+<span class="s2">#automation.VT_CARRAY = 28 # below</span>
+<span class="s2">#automation.VT_USERDEFINED = 29 # below</span>
+
+<span class="s2">#automation.VT_RECORD = 36</span>
+
+<span class="s2">#automation.VT_ARRAY = 8192</span>
+<span class="s2">#automation.VT_BYREF = 16384</span>
+
+<span class="s2">################################################################</span>
+
+<span class="s0">class </span><span class="s1">Parser(object):</span>
+
+    <span class="s0">def </span><span class="s1">make_type(self</span><span class="s0">, </span><span class="s1">tdesc</span><span class="s0">, </span><span class="s1">tinfo):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">COMTYPES[tdesc.vt]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">pass</span>
+
+        <span class="s0">if </span><span class="s1">tdesc.vt == automation.VT_CARRAY:</span>
+            <span class="s1">typ = self.make_type(tdesc._.lpadesc[</span><span class="s3">0</span><span class="s1">].tdescElem</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(tdesc._.lpadesc[</span><span class="s3">0</span><span class="s1">].cDims):</span>
+                <span class="s1">typ = typedesc.ArrayType(typ</span><span class="s0">,</span>
+                                         <span class="s1">tdesc._.lpadesc[</span><span class="s3">0</span><span class="s1">].rgbounds[i].lLbound</span><span class="s0">,</span>
+                                         <span class="s1">tdesc._.lpadesc[</span><span class="s3">0</span><span class="s1">].rgbounds[i].cElements-</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">typ</span>
+
+        <span class="s0">elif </span><span class="s1">tdesc.vt == automation.VT_PTR:</span>
+            <span class="s1">typ = self.make_type(tdesc._.lptdesc[</span><span class="s3">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s0">return </span><span class="s1">PTR(typ)</span>
+
+        <span class="s0">elif </span><span class="s1">tdesc.vt == automation.VT_USERDEFINED:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">ti = tinfo.GetRefTypeInfo(tdesc._.hreftype)</span>
+            <span class="s0">except </span><span class="s1">COMError </span><span class="s0">as </span><span class="s1">details:</span>
+                <span class="s1">type_name = </span><span class="s4">&quot;__error_hreftype_%d__&quot; </span><span class="s1">% tdesc._.hreftype</span>
+                <span class="s1">tlib_name = get_tlib_filename(self.tlib)</span>
+                <span class="s0">if </span><span class="s1">tlib_name </span><span class="s0">is None</span><span class="s1">:</span>
+                    <span class="s1">tlib_name = </span><span class="s4">&quot;unknown typelib&quot;</span>
+                <span class="s1">message = </span><span class="s4">&quot;</span><span class="s0">\n\t</span><span class="s4">GetRefTypeInfo failed in %s: %s</span><span class="s0">\n\t</span><span class="s4">generating type '%s' instead&quot; </span><span class="s1">% \</span>
+                          <span class="s1">(tlib_name</span><span class="s0">, </span><span class="s1">details</span><span class="s0">, </span><span class="s1">type_name)</span>
+                <span class="s0">import </span><span class="s1">warnings</span>
+                <span class="s1">warnings.warn(message</span><span class="s0">, </span><span class="s1">UserWarning);</span>
+                <span class="s1">result = typedesc.Structure(type_name</span><span class="s0">,</span>
+                                            <span class="s1">align=</span><span class="s3">8</span><span class="s0">,</span>
+                                            <span class="s1">members=[]</span><span class="s0">, </span><span class="s1">bases=[]</span><span class="s0">,</span>
+                                            <span class="s1">size=</span><span class="s3">0</span><span class="s1">)</span>
+                <span class="s0">return </span><span class="s1">result</span>
+            <span class="s1">result = self.parse_typeinfo(ti)</span>
+            <span class="s0">assert </span><span class="s1">result </span><span class="s0">is not None, </span><span class="s1">ti.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s0">return </span><span class="s1">result</span>
+
+        <span class="s0">elif </span><span class="s1">tdesc.vt == automation.VT_SAFEARRAY:</span>
+            <span class="s2"># SAFEARRAY(&lt;type&gt;), see Don Box pp.331f</span>
+            <span class="s1">itemtype = self.make_type(tdesc._.lptdesc[</span><span class="s3">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s0">return </span><span class="s1">midlSAFEARRAY(itemtype)</span>
+
+        <span class="s0">raise </span><span class="s1">NotImplementedError(tdesc.vt)</span>
+
+    <span class="s2">################################################################</span>
+
+    <span class="s2"># TKIND_ENUM = 0</span>
+    <span class="s0">def </span><span class="s1">ParseEnum(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">ta = tinfo.GetTypeAttr()</span>
+        <span class="s1">enum_name = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s1">enum = typedesc.Enumeration(enum_name</span><span class="s0">, </span><span class="s3">32</span><span class="s0">, </span><span class="s3">32</span><span class="s1">)</span>
+        <span class="s1">self._register(enum_name</span><span class="s0">, </span><span class="s1">enum)</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cVars):</span>
+            <span class="s1">vd = tinfo.GetVarDesc(i)</span>
+            <span class="s1">name = tinfo.GetDocumentation(vd.memid)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s1">vd.varkind == typeinfo.VAR_CONST</span>
+            <span class="s1">num_val = vd._.lpvarValue[</span><span class="s3">0</span><span class="s1">].value</span>
+            <span class="s1">v = typedesc.EnumValue(name</span><span class="s0">, </span><span class="s1">num_val</span><span class="s0">, </span><span class="s1">enum)</span>
+            <span class="s1">enum.add_value(v)</span>
+        <span class="s0">return </span><span class="s1">enum</span>
+
+    <span class="s2"># TKIND_RECORD = 1</span>
+    <span class="s0">def </span><span class="s1">ParseRecord(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">members = [] </span><span class="s2"># will be filled later</span>
+        <span class="s1">struct_name</span><span class="s0">, </span><span class="s1">doc</span><span class="s0">, </span><span class="s1">helpcntext</span><span class="s0">, </span><span class="s1">helpfile = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s1">struct = typedesc.Structure(struct_name</span><span class="s0">,</span>
+                                    <span class="s1">align=ta.cbAlignment*</span><span class="s3">8</span><span class="s0">,</span>
+                                    <span class="s1">members=members</span><span class="s0">,</span>
+                                    <span class="s1">bases=[]</span><span class="s0">,</span>
+                                    <span class="s1">size=ta.cbSizeInstance*</span><span class="s3">8</span><span class="s1">)</span>
+        <span class="s1">self._register(struct_name</span><span class="s0">, </span><span class="s1">struct)</span>
+
+        <span class="s1">tlib</span><span class="s0">, </span><span class="s1">_ = tinfo.GetContainingTypeLib()</span>
+        <span class="s1">tlib_ta = tlib.GetLibAttr()</span>
+        <span class="s2"># If this is a 32-bit typlib being loaded in a 64-bit process, then the</span>
+        <span class="s2"># size and alignment are incorrect. Set the size to None to disable</span>
+        <span class="s2"># size checks and correct the alignment.</span>
+        <span class="s0">if </span><span class="s1">is_64bits </span><span class="s0">and </span><span class="s1">tlib_ta.syskind == typeinfo.SYS_WIN32:</span>
+            <span class="s1">struct.size = </span><span class="s0">None</span>
+            <span class="s1">struct.align = </span><span class="s3">64</span>
+
+        <span class="s0">if </span><span class="s1">ta.guid:</span>
+            <span class="s1">struct._recordinfo_ = (str(tlib_ta.guid)</span><span class="s0">,</span>
+                                   <span class="s1">tlib_ta.wMajorVerNum</span><span class="s0">, </span><span class="s1">tlib_ta.wMinorVerNum</span><span class="s0">,</span>
+                                   <span class="s1">tlib_ta.lcid</span><span class="s0">,</span>
+                                   <span class="s1">str(ta.guid))</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cVars):</span>
+            <span class="s1">vd = tinfo.GetVarDesc(i)</span>
+            <span class="s1">name = tinfo.GetDocumentation(vd.memid)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s1">offset = vd._.oInst * </span><span class="s3">8</span>
+            <span class="s0">assert </span><span class="s1">vd.varkind == typeinfo.VAR_PERINSTANCE</span>
+            <span class="s1">typ = self.make_type(vd.elemdescVar.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">field = typedesc.Field(name</span><span class="s0">,</span>
+                                   <span class="s1">typ</span><span class="s0">,</span>
+                                   <span class="s0">None, </span><span class="s2"># bits</span>
+                                   <span class="s1">offset)</span>
+            <span class="s1">members.append(field)</span>
+        <span class="s0">return </span><span class="s1">struct</span>
+
+    <span class="s2"># TKIND_MODULE = 2</span>
+    <span class="s0">def </span><span class="s1">ParseModule(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s0">assert </span><span class="s3">0 </span><span class="s1">== ta.cImplTypes</span>
+        <span class="s2"># functions</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cFuncs):</span>
+            <span class="s2"># We skip all function definitions.  There are several</span>
+            <span class="s2"># problems with these, and we can, for comtypes, ignore them.</span>
+            <span class="s0">continue</span>
+            <span class="s1">fd = tinfo.GetFuncDesc(i)</span>
+            <span class="s1">dllname</span><span class="s0">, </span><span class="s1">func_name</span><span class="s0">, </span><span class="s1">ordinal = tinfo.GetDllEntry(fd.memid</span><span class="s0">, </span><span class="s1">fd.invkind)</span>
+            <span class="s1">func_doc = tinfo.GetDocumentation(fd.memid)[</span><span class="s3">1</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s3">0 </span><span class="s1">== fd.cParamsOpt </span><span class="s2"># XXX</span>
+            <span class="s1">returns = self.make_type(fd.elemdescFunc.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+
+            <span class="s0">if </span><span class="s1">fd.callconv == typeinfo.CC_CDECL:</span>
+                <span class="s1">attributes = </span><span class="s4">&quot;__cdecl__&quot;</span>
+            <span class="s0">elif </span><span class="s1">fd.callconv == typeinfo.CC_STDCALL:</span>
+                <span class="s1">attributes = </span><span class="s4">&quot;__stdcall__&quot;</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;calling convention %d&quot; </span><span class="s1">% fd.callconv)</span>
+
+            <span class="s1">func = typedesc.Function(func_name</span><span class="s0">, </span><span class="s1">returns</span><span class="s0">, </span><span class="s1">attributes</span><span class="s0">, </span><span class="s1">extern=</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">func_doc </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">func.doc = func_doc.encode(</span><span class="s4">&quot;mbcs&quot;</span><span class="s1">)</span>
+            <span class="s1">func.dllname = dllname</span>
+            <span class="s1">self._register(func_name</span><span class="s0">, </span><span class="s1">func)</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(fd.cParams):</span>
+                <span class="s1">argtype = self.make_type(fd.lprgelemdescParam[i].tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+                <span class="s1">func.add_argument(argtype)</span>
+
+        <span class="s2"># constants</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cVars):</span>
+            <span class="s1">vd = tinfo.GetVarDesc(i)</span>
+            <span class="s1">name</span><span class="s0">, </span><span class="s1">var_doc = tinfo.GetDocumentation(vd.memid)[</span><span class="s3">0</span><span class="s1">:</span><span class="s3">2</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s1">vd.varkind == typeinfo.VAR_CONST</span>
+            <span class="s1">typ = self.make_type(vd.elemdescVar.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">var_value = vd._.lpvarValue[</span><span class="s3">0</span><span class="s1">].value</span>
+            <span class="s1">v = typedesc.Constant(name</span><span class="s0">, </span><span class="s1">typ</span><span class="s0">, </span><span class="s1">var_value)</span>
+            <span class="s1">self._register(name</span><span class="s0">, </span><span class="s1">v)</span>
+            <span class="s0">if </span><span class="s1">var_doc </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">v.doc = var_doc</span>
+
+    <span class="s2"># TKIND_INTERFACE = 3</span>
+    <span class="s0">def </span><span class="s1">ParseInterface(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">itf_name</span><span class="s0">, </span><span class="s1">itf_doc = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">:</span><span class="s3">2</span><span class="s1">]</span>
+        <span class="s0">assert </span><span class="s1">ta.cImplTypes &lt;= </span><span class="s3">1</span>
+        <span class="s0">if </span><span class="s1">ta.cImplTypes == </span><span class="s3">0 </span><span class="s0">and </span><span class="s1">itf_name != </span><span class="s4">&quot;IUnknown&quot;</span><span class="s1">:</span>
+            <span class="s2"># Windows defines an interface IOleControlTypes in ocidl.idl.</span>
+            <span class="s2"># Don't known what artefact that is - we ignore it.</span>
+            <span class="s2"># It's an interface without methods anyway.</span>
+            <span class="s0">if </span><span class="s1">itf_name != </span><span class="s4">&quot;IOleControlTypes&quot;</span><span class="s1">:</span>
+                <span class="s1">message = </span><span class="s4">&quot;Ignoring interface %s which has no base interface&quot; </span><span class="s1">% itf_name</span>
+                <span class="s0">import </span><span class="s1">warnings</span>
+                <span class="s1">warnings.warn(message</span><span class="s0">, </span><span class="s1">UserWarning);</span>
+            <span class="s0">return None</span>
+
+        <span class="s1">itf = typedesc.ComInterface(itf_name</span><span class="s0">,</span>
+                                    <span class="s1">members=[]</span><span class="s0">,</span>
+                                    <span class="s1">base=</span><span class="s0">None,</span>
+                                    <span class="s1">iid=str(ta.guid)</span><span class="s0">,</span>
+                                    <span class="s1">idlflags=self.interface_type_flags(ta.wTypeFlags))</span>
+        <span class="s0">if </span><span class="s1">itf_doc:</span>
+            <span class="s1">itf.doc = itf_doc</span>
+        <span class="s1">self._register(itf_name</span><span class="s0">, </span><span class="s1">itf)</span>
+
+        <span class="s0">if </span><span class="s1">ta.cImplTypes:</span>
+            <span class="s1">hr = tinfo.GetRefTypeOfImplType(</span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s1">tibase = tinfo.GetRefTypeInfo(hr)</span>
+            <span class="s1">itf.base = self.parse_typeinfo(tibase)</span>
+
+        <span class="s0">assert </span><span class="s1">ta.cVars == </span><span class="s3">0</span><span class="s0">, </span><span class="s4">&quot;vars on an Interface?&quot;</span>
+
+        <span class="s1">members = []</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cFuncs):</span>
+            <span class="s1">fd = tinfo.GetFuncDesc(i)</span>
+<span class="s2">##            func_name = tinfo.GetDocumentation(fd.memid)[0]</span>
+            <span class="s1">func_name</span><span class="s0">, </span><span class="s1">func_doc = tinfo.GetDocumentation(fd.memid)[:</span><span class="s3">2</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s1">fd.funckind == typeinfo.FUNC_PUREVIRTUAL</span>
+            <span class="s1">returns = self.make_type(fd.elemdescFunc.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">names = tinfo.GetNames(fd.memid</span><span class="s0">, </span><span class="s1">fd.cParams+</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s1">names.append(</span><span class="s4">&quot;rhs&quot;</span><span class="s1">)</span>
+            <span class="s1">names = names[:fd.cParams + </span><span class="s3">1</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s1">len(names) == fd.cParams + </span><span class="s3">1</span>
+            <span class="s1">flags = self.func_flags(fd.wFuncFlags)</span>
+            <span class="s1">flags += self.inv_kind(fd.invkind)</span>
+            <span class="s1">mth = typedesc.ComMethod(fd.invkind</span><span class="s0">, </span><span class="s1">fd.memid</span><span class="s0">, </span><span class="s1">func_name</span><span class="s0">, </span><span class="s1">returns</span><span class="s0">, </span><span class="s1">flags</span><span class="s0">, </span><span class="s1">func_doc)</span>
+            <span class="s1">mth.oVft = fd.oVft</span>
+            <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">range(fd.cParams):</span>
+                <span class="s1">typ = self.make_type(fd.lprgelemdescParam[p].tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+                <span class="s1">name = names[p+</span><span class="s3">1</span><span class="s1">]</span>
+                <span class="s1">flags = fd.lprgelemdescParam[p]._.paramdesc.wParamFlags</span>
+                <span class="s0">if </span><span class="s1">flags &amp; typeinfo.PARAMFLAG_FHASDEFAULT:</span>
+                    <span class="s2"># XXX should be handled by VARIANT itself</span>
+                    <span class="s1">var = fd.lprgelemdescParam[p]._.paramdesc.pparamdescex[</span><span class="s3">0</span><span class="s1">].varDefaultValue</span>
+                    <span class="s1">default = var.value</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">default = </span><span class="s0">None</span>
+                <span class="s1">mth.add_argument(typ</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">self.param_flags(flags)</span><span class="s0">, </span><span class="s1">default)</span>
+            <span class="s1">members.append((fd.oVft</span><span class="s0">, </span><span class="s1">mth))</span>
+        <span class="s2"># Sort the methods by oVft (VTable offset): Some typeinfo</span>
+        <span class="s2"># don't list methods in VTable order.</span>
+        <span class="s1">members.sort()</span>
+        <span class="s1">itf.members.extend([m[</span><span class="s3">1</span><span class="s1">] </span><span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">members])</span>
+
+        <span class="s0">return </span><span class="s1">itf</span>
+
+    <span class="s2"># TKIND_DISPATCH = 4</span>
+    <span class="s0">def </span><span class="s1">ParseDispatch(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">itf_name</span><span class="s0">, </span><span class="s1">doc = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">:</span><span class="s3">2</span><span class="s1">]</span>
+        <span class="s0">assert </span><span class="s1">ta.cImplTypes == </span><span class="s3">1</span>
+
+        <span class="s1">hr = tinfo.GetRefTypeOfImplType(</span><span class="s3">0</span><span class="s1">)</span>
+        <span class="s1">tibase = tinfo.GetRefTypeInfo(hr)</span>
+        <span class="s1">base = self.parse_typeinfo(tibase)</span>
+        <span class="s1">members = []</span>
+        <span class="s1">itf = typedesc.DispInterface(itf_name</span><span class="s0">,</span>
+                                     <span class="s1">members=members</span><span class="s0">,</span>
+                                     <span class="s1">base=base</span><span class="s0">,</span>
+                                     <span class="s1">iid=str(ta.guid)</span><span class="s0">,</span>
+                                     <span class="s1">idlflags=self.interface_type_flags(ta.wTypeFlags))</span>
+        <span class="s0">if </span><span class="s1">doc </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">itf.doc = str(doc.split(</span><span class="s4">&quot;</span><span class="s0">\0</span><span class="s4">&quot;</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">])</span>
+        <span class="s1">self._register(itf_name</span><span class="s0">, </span><span class="s1">itf)</span>
+
+        <span class="s2"># This code can only handle pure dispinterfaces.  Dual</span>
+        <span class="s2"># interfaces are parsed in ParseInterface().</span>
+        <span class="s0">assert </span><span class="s1">ta.wTypeFlags &amp; typeinfo.TYPEFLAG_FDUAL == </span><span class="s3">0</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cVars):</span>
+            <span class="s1">vd = tinfo.GetVarDesc(i)</span>
+            <span class="s0">assert </span><span class="s1">vd.varkind == typeinfo.VAR_DISPATCH</span>
+            <span class="s1">var_name</span><span class="s0">, </span><span class="s1">var_doc = tinfo.GetDocumentation(vd.memid)[</span><span class="s3">0</span><span class="s1">:</span><span class="s3">2</span><span class="s1">]</span>
+            <span class="s1">typ = self.make_type(vd.elemdescVar.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">mth = typedesc.DispProperty(vd.memid</span><span class="s0">, </span><span class="s1">var_name</span><span class="s0">, </span><span class="s1">typ</span><span class="s0">, </span><span class="s1">self.var_flags(vd.wVarFlags)</span><span class="s0">, </span><span class="s1">var_doc)</span>
+            <span class="s1">itf.members.append(mth)</span>
+
+        <span class="s2"># At least the EXCEL typelib lists the IUnknown and IDispatch</span>
+        <span class="s2"># methods even for this kind of interface.  I didn't find any</span>
+        <span class="s2"># indication about these methods in the various flags, so we</span>
+        <span class="s2"># have to exclude them by name.</span>
+        <span class="s2"># CLF: 12/14/2012 Do this in a way that does not exclude other methods.</span>
+        <span class="s2">#      I have encountered typlibs where only &quot;QueryInterface&quot;, &quot;AddRef&quot;</span>
+        <span class="s2">#      and &quot;Release&quot; are to be skipped.</span>
+        <span class="s1">ignored_names = set([</span><span class="s4">&quot;QueryInterface&quot;</span><span class="s0">, </span><span class="s4">&quot;AddRef&quot;</span><span class="s0">, </span><span class="s4">&quot;Release&quot;</span><span class="s0">,</span>
+                             <span class="s4">&quot;GetTypeInfoCount&quot;</span><span class="s0">, </span><span class="s4">&quot;GetTypeInfo&quot;</span><span class="s0">,</span>
+                             <span class="s4">&quot;GetIDsOfNames&quot;</span><span class="s0">, </span><span class="s4">&quot;Invoke&quot;</span><span class="s1">])</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cFuncs):</span>
+            <span class="s1">fd = tinfo.GetFuncDesc(i)</span>
+            <span class="s1">func_name</span><span class="s0">, </span><span class="s1">func_doc = tinfo.GetDocumentation(fd.memid)[:</span><span class="s3">2</span><span class="s1">]</span>
+            <span class="s0">if </span><span class="s1">func_name </span><span class="s0">in </span><span class="s1">ignored_names:</span>
+                <span class="s0">continue</span>
+            <span class="s0">assert </span><span class="s1">fd.funckind == typeinfo.FUNC_DISPATCH</span>
+
+            <span class="s1">returns = self.make_type(fd.elemdescFunc.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">names = tinfo.GetNames(fd.memid</span><span class="s0">, </span><span class="s1">fd.cParams+</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s1">names.append(</span><span class="s4">&quot;rhs&quot;</span><span class="s1">)</span>
+            <span class="s1">names = names[:fd.cParams + </span><span class="s3">1</span><span class="s1">]</span>
+            <span class="s0">assert </span><span class="s1">len(names) == fd.cParams + </span><span class="s3">1 </span><span class="s2"># function name first, then parameter names</span>
+            <span class="s1">flags = self.func_flags(fd.wFuncFlags)</span>
+            <span class="s1">flags += self.inv_kind(fd.invkind)</span>
+            <span class="s1">mth = typedesc.DispMethod(fd.memid</span><span class="s0">, </span><span class="s1">fd.invkind</span><span class="s0">, </span><span class="s1">func_name</span><span class="s0">, </span><span class="s1">returns</span><span class="s0">, </span><span class="s1">flags</span><span class="s0">, </span><span class="s1">func_doc)</span>
+            <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">range(fd.cParams):</span>
+                <span class="s1">typ = self.make_type(fd.lprgelemdescParam[p].tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+                <span class="s1">name = names[p+</span><span class="s3">1</span><span class="s1">]</span>
+                <span class="s1">flags = fd.lprgelemdescParam[p]._.paramdesc.wParamFlags</span>
+                <span class="s0">if </span><span class="s1">flags &amp; typeinfo.PARAMFLAG_FHASDEFAULT:</span>
+                    <span class="s1">var = fd.lprgelemdescParam[p]._.paramdesc.pparamdescex[</span><span class="s3">0</span><span class="s1">].varDefaultValue</span>
+                    <span class="s1">default = var.value</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">default = </span><span class="s0">None</span>
+                <span class="s1">mth.add_argument(typ</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">self.param_flags(flags)</span><span class="s0">, </span><span class="s1">default)</span>
+            <span class="s1">itf.members.append(mth)</span>
+
+        <span class="s0">return </span><span class="s1">itf</span>
+
+    <span class="s0">def </span><span class="s1">inv_kind(self</span><span class="s0">, </span><span class="s1">invkind):</span>
+        <span class="s1">NAMES = {automation.DISPATCH_METHOD: []</span><span class="s0">,</span>
+                 <span class="s1">automation.DISPATCH_PROPERTYPUT: [</span><span class="s4">&quot;propput&quot;</span><span class="s1">]</span><span class="s0">,</span>
+                 <span class="s1">automation.DISPATCH_PROPERTYPUTREF: [</span><span class="s4">&quot;propputref&quot;</span><span class="s1">]</span><span class="s0">,</span>
+                 <span class="s1">automation.DISPATCH_PROPERTYGET: [</span><span class="s4">&quot;propget&quot;</span><span class="s1">]}</span>
+        <span class="s0">return </span><span class="s1">NAMES[invkind]</span>
+
+    <span class="s0">def </span><span class="s1">func_flags(self</span><span class="s0">, </span><span class="s1">flags):</span>
+        <span class="s2"># map FUNCFLAGS values to idl attributes</span>
+        <span class="s1">NAMES = {typeinfo.FUNCFLAG_FRESTRICTED: </span><span class="s4">&quot;restricted&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FSOURCE: </span><span class="s4">&quot;source&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FBINDABLE: </span><span class="s4">&quot;bindable&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FREQUESTEDIT: </span><span class="s4">&quot;requestedit&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FDISPLAYBIND: </span><span class="s4">&quot;displaybind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FDEFAULTBIND: </span><span class="s4">&quot;defaultbind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FHIDDEN: </span><span class="s4">&quot;hidden&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FUSESGETLASTERROR: </span><span class="s4">&quot;usesgetlasterror&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FDEFAULTCOLLELEM: </span><span class="s4">&quot;defaultcollelem&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FUIDEFAULT: </span><span class="s4">&quot;uidefault&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FNONBROWSABLE: </span><span class="s4">&quot;nonbrowsable&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.FUNCFLAG_FREPLACEABLE: &quot;???&quot;,</span>
+                 <span class="s1">typeinfo.FUNCFLAG_FIMMEDIATEBIND: </span><span class="s4">&quot;immediatebind&quot;</span><span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">[NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NAMES </span><span class="s0">if </span><span class="s1">bit &amp; flags]</span>
+
+    <span class="s0">def </span><span class="s1">param_flags(self</span><span class="s0">, </span><span class="s1">flags):</span>
+        <span class="s2"># map PARAMFLAGS values to idl attributes</span>
+        <span class="s1">NAMES = {typeinfo.PARAMFLAG_FIN: </span><span class="s4">&quot;in&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.PARAMFLAG_FOUT: </span><span class="s4">&quot;out&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.PARAMFLAG_FLCID: </span><span class="s4">&quot;lcid&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.PARAMFLAG_FRETVAL: </span><span class="s4">&quot;retval&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.PARAMFLAG_FOPT: </span><span class="s4">&quot;optional&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.PARAMFLAG_FHASDEFAULT: &quot;&quot;,</span>
+                 <span class="s2"># typeinfo.PARAMFLAG_FHASCUSTDATA: &quot;&quot;,</span>
+                 <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">[NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NAMES </span><span class="s0">if </span><span class="s1">bit &amp; flags]</span>
+
+    <span class="s0">def </span><span class="s1">coclass_type_flags(self</span><span class="s0">, </span><span class="s1">flags):</span>
+        <span class="s2"># map TYPEFLAGS values to idl attributes</span>
+        <span class="s1">NAMES = {typeinfo.TYPEFLAG_FAPPOBJECT: </span><span class="s4">&quot;appobject&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FCANCREATE:</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FLICENSED: </span><span class="s4">&quot;licensed&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FPREDECLID:</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FHIDDEN: </span><span class="s4">&quot;hidden&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FCONTROL: </span><span class="s4">&quot;control&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FDUAL: </span><span class="s4">&quot;dual&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FNONEXTENSIBLE: </span><span class="s4">&quot;nonextensible&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FOLEAUTOMATION: </span><span class="s4">&quot;oleautomation&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FRESTRICTED: </span><span class="s4">&quot;restricted&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FAGGREGATABLE: </span><span class="s4">&quot;aggregatable&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FREPLACEABLE:</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FDISPATCHABLE # computed, no flag for this</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FREVERSEBIND: </span><span class="s4">&quot;reversebind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FPROXY: </span><span class="s4">&quot;proxy&quot;</span><span class="s0">,</span>
+                 <span class="s1">}</span>
+        <span class="s1">NEGATIVE_NAMES = {typeinfo.TYPEFLAG_FCANCREATE: </span><span class="s4">&quot;noncreatable&quot;</span><span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">[NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NAMES </span><span class="s0">if </span><span class="s1">bit &amp; flags] + \</span>
+               <span class="s1">[NEGATIVE_NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NEGATIVE_NAMES </span><span class="s0">if not </span><span class="s1">(bit &amp; flags)]</span>
+
+    <span class="s0">def </span><span class="s1">interface_type_flags(self</span><span class="s0">, </span><span class="s1">flags):</span>
+        <span class="s2"># map TYPEFLAGS values to idl attributes</span>
+        <span class="s1">NAMES = {typeinfo.TYPEFLAG_FAPPOBJECT: </span><span class="s4">&quot;appobject&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FCANCREATE:</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FLICENSED: </span><span class="s4">&quot;licensed&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FPREDECLID:</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FHIDDEN: </span><span class="s4">&quot;hidden&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FCONTROL: </span><span class="s4">&quot;control&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FDUAL: </span><span class="s4">&quot;dual&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FNONEXTENSIBLE: </span><span class="s4">&quot;nonextensible&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FOLEAUTOMATION: </span><span class="s4">&quot;oleautomation&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FRESTRICTED: </span><span class="s4">&quot;restricted&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FAGGREGATABLE: </span><span class="s4">&quot;aggregatable&quot;</span><span class="s0">,</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FREPLACEABLE:</span>
+                 <span class="s2"># typeinfo.TYPEFLAG_FDISPATCHABLE # computed, no flag for this</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FREVERSEBIND: </span><span class="s4">&quot;reversebind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.TYPEFLAG_FPROXY: </span><span class="s4">&quot;proxy&quot;</span><span class="s0">,</span>
+                 <span class="s1">}</span>
+        <span class="s1">NEGATIVE_NAMES = {}</span>
+        <span class="s0">return </span><span class="s1">[NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NAMES </span><span class="s0">if </span><span class="s1">bit &amp; flags] + \</span>
+               <span class="s1">[NEGATIVE_NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NEGATIVE_NAMES </span><span class="s0">if not </span><span class="s1">(bit &amp; flags)]</span>
+
+    <span class="s0">def </span><span class="s1">var_flags(self</span><span class="s0">, </span><span class="s1">flags):</span>
+        <span class="s1">NAMES = {typeinfo.VARFLAG_FREADONLY: </span><span class="s4">&quot;readonly&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FSOURCE: </span><span class="s4">&quot;source&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FBINDABLE: </span><span class="s4">&quot;bindable&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FREQUESTEDIT: </span><span class="s4">&quot;requestedit&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FDISPLAYBIND: </span><span class="s4">&quot;displaybind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FDEFAULTBIND: </span><span class="s4">&quot;defaultbind&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FHIDDEN: </span><span class="s4">&quot;hidden&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FRESTRICTED: </span><span class="s4">&quot;restricted&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FDEFAULTCOLLELEM: </span><span class="s4">&quot;defaultcollelem&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FUIDEFAULT: </span><span class="s4">&quot;uidefault&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FNONBROWSABLE: </span><span class="s4">&quot;nonbrowsable&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FREPLACEABLE: </span><span class="s4">&quot;replaceable&quot;</span><span class="s0">,</span>
+                 <span class="s1">typeinfo.VARFLAG_FIMMEDIATEBIND: </span><span class="s4">&quot;immediatebind&quot;</span>
+                 <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">[NAMES[bit] </span><span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">NAMES </span><span class="s0">if </span><span class="s1">bit &amp; flags]</span>
+
+
+    <span class="s2"># TKIND_COCLASS = 5</span>
+    <span class="s0">def </span><span class="s1">ParseCoClass(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s2"># possible ta.wTypeFlags: helpstring, helpcontext, licensed,</span>
+        <span class="s2">#        version, control, hidden, and appobject</span>
+        <span class="s1">coclass_name</span><span class="s0">, </span><span class="s1">doc = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">:</span><span class="s3">2</span><span class="s1">]</span>
+        <span class="s1">tlibattr = tinfo.GetContainingTypeLib()[</span><span class="s3">0</span><span class="s1">].GetLibAttr()</span>
+        <span class="s1">coclass = typedesc.CoClass(coclass_name</span><span class="s0">,</span>
+                                   <span class="s1">str(ta.guid)</span><span class="s0">,</span>
+                                   <span class="s1">self.coclass_type_flags(ta.wTypeFlags)</span><span class="s0">,</span>
+                                   <span class="s1">tlibattr)</span>
+        <span class="s0">if </span><span class="s1">doc </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">coclass.doc = doc</span>
+        <span class="s1">self._register(coclass_name</span><span class="s0">, </span><span class="s1">coclass)</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cImplTypes):</span>
+            <span class="s1">hr = tinfo.GetRefTypeOfImplType(i)</span>
+            <span class="s1">ti = tinfo.GetRefTypeInfo(hr)</span>
+            <span class="s1">itf = self.parse_typeinfo(ti)</span>
+            <span class="s1">flags = tinfo.GetImplTypeFlags(i)</span>
+            <span class="s1">coclass.add_interface(itf</span><span class="s0">, </span><span class="s1">flags)</span>
+        <span class="s0">return </span><span class="s1">coclass</span>
+
+    <span class="s2"># TKIND_ALIAS = 6</span>
+    <span class="s0">def </span><span class="s1">ParseAlias(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">name = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s1">typ = self.make_type(ta.tdescAlias</span><span class="s0">, </span><span class="s1">tinfo)</span>
+        <span class="s1">alias = typedesc.Typedef(name</span><span class="s0">, </span><span class="s1">typ)</span>
+        <span class="s1">self._register(name</span><span class="s0">, </span><span class="s1">alias)</span>
+        <span class="s0">return </span><span class="s1">alias</span>
+
+    <span class="s2"># TKIND_UNION = 7</span>
+    <span class="s0">def </span><span class="s1">ParseUnion(self</span><span class="s0">, </span><span class="s1">tinfo</span><span class="s0">, </span><span class="s1">ta):</span>
+        <span class="s1">union_name</span><span class="s0">, </span><span class="s1">doc</span><span class="s0">, </span><span class="s1">helpcntext</span><span class="s0">, </span><span class="s1">helpfile = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s1">members = []</span>
+        <span class="s1">union = typedesc.Union(union_name</span><span class="s0">,</span>
+                               <span class="s1">align=ta.cbAlignment*</span><span class="s3">8</span><span class="s0">,</span>
+                               <span class="s1">members=members</span><span class="s0">,</span>
+                               <span class="s1">bases=[]</span><span class="s0">,</span>
+                               <span class="s1">size=ta.cbSizeInstance*</span><span class="s3">8</span><span class="s1">)</span>
+        <span class="s1">self._register(union_name</span><span class="s0">, </span><span class="s1">union)</span>
+
+        <span class="s1">tlib</span><span class="s0">, </span><span class="s1">_ = tinfo.GetContainingTypeLib()</span>
+        <span class="s1">tlib_ta = tlib.GetLibAttr()</span>
+        <span class="s2"># If this is a 32-bit typlib being loaded in a 64-bit process, then the</span>
+        <span class="s2"># size and alignment are incorrect. Set the size to None to disable</span>
+        <span class="s2"># size checks and correct the alignment.</span>
+        <span class="s0">if </span><span class="s1">is_64bits </span><span class="s0">and </span><span class="s1">tlib_ta.syskind == typeinfo.SYS_WIN32:</span>
+            <span class="s1">union.size = </span><span class="s0">None</span>
+            <span class="s1">union.align = </span><span class="s3">64</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(ta.cVars):</span>
+            <span class="s1">vd = tinfo.GetVarDesc(i)</span>
+            <span class="s1">name = tinfo.GetDocumentation(vd.memid)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s1">offset = vd._.oInst * </span><span class="s3">8</span>
+            <span class="s0">assert </span><span class="s1">vd.varkind == typeinfo.VAR_PERINSTANCE</span>
+            <span class="s1">typ = self.make_type(vd.elemdescVar.tdesc</span><span class="s0">, </span><span class="s1">tinfo)</span>
+            <span class="s1">field = typedesc.Field(name</span><span class="s0">,</span>
+                                   <span class="s1">typ</span><span class="s0">,</span>
+                                   <span class="s0">None, </span><span class="s2"># bits</span>
+                                   <span class="s1">offset)</span>
+            <span class="s1">members.append(field)</span>
+        <span class="s0">return </span><span class="s1">union</span>
+
+    <span class="s2">################################################################</span>
+
+    <span class="s0">def </span><span class="s1">_typelib_module(self</span><span class="s0">, </span><span class="s1">tlib=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">if </span><span class="s1">tlib </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">tlib = self.tlib</span>
+        <span class="s2"># return a string that uniquely identifies a typelib.</span>
+        <span class="s2"># The string doesn't have any meaning outside this instance.</span>
+        <span class="s0">return </span><span class="s1">str(tlib.GetLibAttr())</span>
+
+    <span class="s0">def </span><span class="s1">_register(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">value</span><span class="s0">, </span><span class="s1">tlib=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s1">modname = self._typelib_module(tlib)</span>
+        <span class="s1">fullname = </span><span class="s4">&quot;%s.%s&quot; </span><span class="s1">% (modname</span><span class="s0">, </span><span class="s1">name)</span>
+        <span class="s0">if </span><span class="s1">fullname </span><span class="s0">in </span><span class="s1">self.items:</span>
+            <span class="s2"># XXX Can we really allow this? It happens, at least.</span>
+            <span class="s0">if </span><span class="s1">isinstance(value</span><span class="s0">, </span><span class="s1">typedesc.External):</span>
+                <span class="s0">return</span>
+            <span class="s2"># BUG: We try to register an item that's already registered.</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;Bug: Multiple registered name '%s': %r&quot; </span><span class="s1">% (name</span><span class="s0">, </span><span class="s1">value))</span>
+        <span class="s1">self.items[fullname] = value</span>
+
+    <span class="s0">def </span><span class="s1">parse_typeinfo(self</span><span class="s0">, </span><span class="s1">tinfo):</span>
+        <span class="s1">name = tinfo.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s1">modname = self._typelib_module()</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self.items[</span><span class="s4">&quot;%s.%s&quot; </span><span class="s1">% (modname</span><span class="s0">, </span><span class="s1">name)]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">pass</span>
+
+        <span class="s1">tlib = tinfo.GetContainingTypeLib()[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s0">if </span><span class="s1">tlib != self.tlib:</span>
+            <span class="s1">ta = tinfo.GetTypeAttr()</span>
+            <span class="s1">size = ta.cbSizeInstance * </span><span class="s3">8</span>
+            <span class="s1">align = ta.cbAlignment * </span><span class="s3">8</span>
+            <span class="s1">typ = typedesc.External(tlib</span><span class="s0">,</span>
+                                    <span class="s1">name</span><span class="s0">,</span>
+                                    <span class="s1">size</span><span class="s0">,</span>
+                                    <span class="s1">align</span><span class="s0">,</span>
+                                    <span class="s1">tlib.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[:</span><span class="s3">2</span><span class="s1">])</span>
+            <span class="s1">self._register(name</span><span class="s0">, </span><span class="s1">typ</span><span class="s0">, </span><span class="s1">tlib)</span>
+            <span class="s0">return </span><span class="s1">typ</span>
+
+        <span class="s1">ta = tinfo.GetTypeAttr()</span>
+        <span class="s1">tkind = ta.typekind</span>
+
+        <span class="s0">if </span><span class="s1">tkind == typeinfo.TKIND_ENUM: </span><span class="s2"># 0</span>
+            <span class="s0">return </span><span class="s1">self.ParseEnum(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_RECORD: </span><span class="s2"># 1</span>
+            <span class="s0">return </span><span class="s1">self.ParseRecord(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_MODULE: </span><span class="s2"># 2</span>
+            <span class="s0">return </span><span class="s1">self.ParseModule(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_INTERFACE: </span><span class="s2"># 3</span>
+            <span class="s0">return </span><span class="s1">self.ParseInterface(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_DISPATCH: </span><span class="s2"># 4</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s2"># GetRefTypeOfImplType(-1) returns the custom portion</span>
+                <span class="s2"># of a dispinterface, if it is dual</span>
+                <span class="s1">href = tinfo.GetRefTypeOfImplType(-</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s0">except </span><span class="s1">COMError:</span>
+                <span class="s2"># no dual interface</span>
+                <span class="s0">return </span><span class="s1">self.ParseDispatch(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+            <span class="s1">tinfo = tinfo.GetRefTypeInfo(href)</span>
+            <span class="s1">ta = tinfo.GetTypeAttr()</span>
+            <span class="s0">assert </span><span class="s1">ta.typekind == typeinfo.TKIND_INTERFACE</span>
+            <span class="s0">return </span><span class="s1">self.ParseInterface(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_COCLASS: </span><span class="s2"># 5</span>
+            <span class="s0">return </span><span class="s1">self.ParseCoClass(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_ALIAS: </span><span class="s2"># 6</span>
+            <span class="s0">return </span><span class="s1">self.ParseAlias(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">elif </span><span class="s1">tkind == typeinfo.TKIND_UNION: </span><span class="s2"># 7</span>
+            <span class="s0">return </span><span class="s1">self.ParseUnion(tinfo</span><span class="s0">, </span><span class="s1">ta)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">print(</span><span class="s4">&quot;NYI&quot;</span><span class="s0">, </span><span class="s1">tkind)</span>
+<span class="s2">##            raise &quot;NYI&quot;, tkind</span>
+
+    <span class="s0">def </span><span class="s1">parse_LibraryDescription(self):</span>
+        <span class="s1">la = self.tlib.GetLibAttr()</span>
+        <span class="s1">name</span><span class="s0">, </span><span class="s1">doc = self.tlib.GetDocumentation(-</span><span class="s3">1</span><span class="s1">)[:</span><span class="s3">2</span><span class="s1">]</span>
+        <span class="s1">desc = typedesc.TypeLib(name</span><span class="s0">,</span>
+                                <span class="s1">str(la.guid)</span><span class="s0">, </span><span class="s1">la.wMajorVerNum</span><span class="s0">, </span><span class="s1">la.wMinorVerNum</span><span class="s0">,</span>
+                                <span class="s1">doc)</span>
+        <span class="s1">self._register(</span><span class="s0">None, </span><span class="s1">desc)</span>
+
+    <span class="s2">################################################################</span>
+
+    <span class="s0">def </span><span class="s1">parse(self):</span>
+        <span class="s1">self.parse_LibraryDescription()</span>
+
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(self.tlib.GetTypeInfoCount()):</span>
+            <span class="s1">tinfo = self.tlib.GetTypeInfo(i)</span>
+            <span class="s1">self.parse_typeinfo(tinfo)</span>
+        <span class="s0">return </span><span class="s1">self.items</span>
+
+<span class="s0">class </span><span class="s1">TlbFileParser(Parser):</span>
+    <span class="s5">&quot;Parses a type library from a file&quot;</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">path):</span>
+        <span class="s2"># XXX DOESN'T LOOK CORRECT: We should NOT register the typelib.</span>
+        <span class="s1">self.tlib = typeinfo.LoadTypeLibEx(path)</span><span class="s2">#, regkind=typeinfo.REGKIND_REGISTER)</span>
+        <span class="s1">self.items = {}</span>
+
+<span class="s0">class </span><span class="s1">TypeLibParser(Parser):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">tlib):</span>
+        <span class="s1">self.tlib = tlib</span>
+        <span class="s1">self.items = {}</span>
+
+<span class="s2">################################################################</span>
+<span class="s2"># some interesting typelibs</span>
+
+<span class="s2">## these do NOT work:</span>
+    <span class="s2"># XXX infinite loop?</span>
+<span class="s2">##    path = r&quot;mshtml.tlb&quot; # has propputref</span>
+
+    <span class="s2"># has SAFEARRAY</span>
+    <span class="s2"># HRESULT Run(BSTR, SAFEARRAY(VARIANT)*, VARIANT*)</span>
+<span class="s2">##    path = &quot;msscript.ocx&quot;</span>
+
+    <span class="s2"># has SAFEARRAY</span>
+    <span class="s2"># HRESULT AddAddress(SAFEARRAY(BSTR)*, SAFEARRAY(BSTR)*)</span>
+<span class="s2">##    path = r&quot;c:\Programme\Microsoft Office\Office\MSWORD8.OLB&quot; # has propputref</span>
+
+    <span class="s2"># has SAFEARRAY:</span>
+    <span class="s2"># SAFEARRAY(unsigned char) FileSignatureInfo(BSTR, long, MsiSignatureInfo)</span>
+<span class="s2">##    path = r&quot;msi.dll&quot; # DispProperty</span>
+
+    <span class="s2"># fails packing IDLDESC</span>
+<span class="s2">##    path = r&quot;C:\Dokumente und Einstellungen\thomas\Desktop\tlb\win.tlb&quot;</span>
+    <span class="s2"># fails packing WIN32_FIND_DATA</span>
+<span class="s2">##    path = r&quot;C:\Dokumente und Einstellungen\thomas\Desktop\tlb\win32.tlb&quot;</span>
+    <span class="s2"># has a POINTER(IUnknown) as default parameter value</span>
+<span class="s2">##    path = r&quot;c:\Programme\Gemeinsame Dateien\Microsoft Shared\Speech\sapi.dll&quot;</span>
+
+
+<span class="s2">##    path = r&quot;hnetcfg.dll&quot;</span>
+<span class="s2">##    path = r&quot;simpdata.tlb&quot;</span>
+<span class="s2">##    path = r&quot;nscompat.tlb&quot;</span>
+<span class="s2">##    path = r&quot;stdole32.tlb&quot;</span>
+
+<span class="s2">##    path = r&quot;shdocvw.dll&quot;</span>
+
+<span class="s2">##    path = r&quot;c:\Programme\Microsoft Office\Office\MSO97.DLL&quot;</span>
+<span class="s2">##    path = r&quot;PICCLP32.OCX&quot; # DispProperty</span>
+<span class="s2">##    path = r&quot;MSHFLXGD.OCX&quot; # DispProperty, propputref</span>
+<span class="s2">##    path = r&quot;scrrun.dll&quot; # propput AND propputref on IDictionary::Item</span>
+<span class="s2">##    path = r&quot;C:\Dokumente und Einstellungen\thomas\Desktop\tlb\threadapi.tlb&quot;</span>
+
+<span class="s2">##    path = r&quot;..\samples\BITS\bits2_0.tlb&quot;</span>
+
+<span class="s2">##    path = r&quot;c:\vc98\include\activscp.tlb&quot;</span>
+
+<span class="s0">def </span><span class="s1">get_tlib_filename(tlib):</span>
+    <span class="s2"># seems if the typelib is not registered, there's no way to</span>
+    <span class="s2"># determine the filename.</span>
+    <span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">windll</span><span class="s0">, </span><span class="s1">byref</span>
+    <span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">BSTR</span>
+    <span class="s1">la = tlib.GetLibAttr()</span>
+    <span class="s1">name = BSTR()</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">windll.oleaut32.QueryPathOfRegTypeLib</span>
+    <span class="s0">except </span><span class="s1">AttributeError:</span>
+        <span class="s2"># Windows CE doesn't have this function</span>
+        <span class="s0">return None</span>
+    <span class="s0">if </span><span class="s3">0 </span><span class="s1">== windll.oleaut32.QueryPathOfRegTypeLib(byref(la.guid)</span><span class="s0">,</span>
+                                                  <span class="s1">la.wMajorVerNum</span><span class="s0">,</span>
+                                                  <span class="s1">la.wMinorVerNum</span><span class="s0">,</span>
+                                                  <span class="s3">0</span><span class="s0">, </span><span class="s2"># lcid</span>
+                                                  <span class="s1">byref(name)</span>
+                                                  <span class="s1">):</span>
+        <span class="s1">full_filename = name.value.split(</span><span class="s4">&quot;</span><span class="s0">\0</span><span class="s4">&quot;</span><span class="s1">)[</span><span class="s3">0</span><span class="s1">]</span>
+        <span class="s0">if not </span><span class="s1">os.path.isabs(full_filename):</span>
+            <span class="s2"># workaround Windows 7 bug in QueryPathOfRegTypeLib returning relative path</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">dll = windll.LoadLibrary(full_filename)</span>
+                <span class="s1">full_filename = _get_module_filename(dll._handle)</span>
+                <span class="s0">del </span><span class="s1">dll</span>
+            <span class="s0">except </span><span class="s1">OSError:</span>
+                <span class="s0">return None</span>
+        <span class="s0">return </span><span class="s1">full_filename</span>
+    <span class="s0">return None</span>
+
+<span class="s0">def </span><span class="s1">_py2exe_hint():</span>
+    <span class="s2"># If the tlbparser is frozen, we need to include these</span>
+    <span class="s0">import </span><span class="s1">comtypes.persist</span>
+    <span class="s0">import </span><span class="s1">comtypes.typeinfo</span>
+    <span class="s0">import </span><span class="s1">comtypes.automation</span>
+
+<span class="s0">def </span><span class="s1">generate_module(tlib</span><span class="s0">, </span><span class="s1">ofi</span><span class="s0">, </span><span class="s1">pathname):</span>
+    <span class="s1">known_symbols = {}</span>
+    <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">(</span><span class="s4">&quot;comtypes.persist&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;comtypes.typeinfo&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;comtypes.automation&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;comtypes._others&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;comtypes&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;ctypes.wintypes&quot;</span><span class="s0">,</span>
+                 <span class="s4">&quot;ctypes&quot;</span><span class="s1">):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">mod = __import__(name)</span>
+        <span class="s0">except </span><span class="s1">ImportError:</span>
+            <span class="s0">if </span><span class="s1">name == </span><span class="s4">&quot;comtypes._others&quot;</span><span class="s1">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">raise</span>
+        <span class="s0">for </span><span class="s1">submodule </span><span class="s0">in </span><span class="s1">name.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">)[</span><span class="s3">1</span><span class="s1">:]:</span>
+            <span class="s1">mod = getattr(mod</span><span class="s0">, </span><span class="s1">submodule)</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">mod.__dict__:</span>
+            <span class="s1">known_symbols[name] = mod.__name__</span>
+    <span class="s1">p = TypeLibParser(tlib)</span>
+    <span class="s0">if </span><span class="s1">pathname </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">pathname = get_tlib_filename(tlib)</span>
+    <span class="s1">items = p.parse()</span>
+
+    <span class="s0">from </span><span class="s1">.codegenerator </span><span class="s0">import </span><span class="s1">Generator</span>
+
+    <span class="s1">gen = Generator(ofi</span><span class="s0">,</span>
+                    <span class="s1">known_symbols=known_symbols</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+
+    <span class="s1">gen.generate_code(list(items.values())</span><span class="s0">, </span><span class="s1">filename=pathname)</span>
+
+<span class="s2"># -eof-</span>
+</pre>
+</body>
+</html>

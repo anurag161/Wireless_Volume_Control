@@ -1,0 +1,59 @@
+<html>
+<head>
+<title>mylib.idl</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+.s1 { color: #6a8759;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+mylib.idl</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">&quot;oaidl.idl&quot;</span><span class="s0">;</span>
+                    <span class="s0">import </span><span class="s1">&quot;ocidl.idl&quot;</span><span class="s0">;</span>
+                    <span class="s0">[uuid(f4f74946-4546-44bd-a073-9ea6f9fe78cb)] library TestLib {</span>
+<span class="s0">[object,</span>
+                        <span class="s0">oleautomation,</span>
+                        <span class="s0">dual,</span>
+                        <span class="s0">uuid(ed978f5f-cc45-4fcc-a7a6-751ffa8dfedd)]</span>
+                        <span class="s2">interface </span><span class="s0">IMyInterface : IDispatch {</span>
+<span class="s0">[id(</span><span class="s3">100</span><span class="s0">), propget] HRESULT Name([</span><span class="s2">out</span><span class="s0">, retval] BSTR *pname);</span>
+               <span class="s0">[id(</span><span class="s3">100</span><span class="s0">), propput] HRESULT Name([</span><span class="s2">in</span><span class="s0">] BSTR name);</span>
+<span class="s0">[id(</span><span class="s3">101</span><span class="s0">)] HRESULT MixedInOut([</span><span class="s2">in</span><span class="s0">] int a, [</span><span class="s2">out</span><span class="s0">] int *b, [</span><span class="s2">in</span><span class="s0">] int c, [</span><span class="s2">out</span><span class="s0">] int *d);</span>
+<span class="s0">[id(</span><span class="s3">102</span><span class="s0">)] HRESULT MultiInOutArgs([</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pa, [</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pb);</span>
+<span class="s0">HRESULT MultiInOutArgs2([</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pa, [</span><span class="s2">out</span><span class="s0">] int *pb);</span>
+<span class="s0">HRESULT MultiInOutArgs3([</span><span class="s2">out</span><span class="s0">] int *pa, [</span><span class="s2">out</span><span class="s0">] int *pb);</span>
+<span class="s0">HRESULT MultiInOutArgs4([</span><span class="s2">out</span><span class="s0">] int *pa, [</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] int *pb);</span>
+<span class="s0">HRESULT GetStackTrace([</span><span class="s2">in</span><span class="s0">] ULONG FrameOffset,</span>
+                                     <span class="s0">[</span><span class="s2">in</span><span class="s0">, </span><span class="s2">out</span><span class="s0">] INT *Frames,</span>
+                                     <span class="s0">[</span><span class="s2">in</span><span class="s0">] ULONG FramesSize,</span>
+                                     <span class="s0">[</span><span class="s2">out</span><span class="s0">, optional] ULONG *FramesFilled);</span>
+<span class="s0">HRESULT dummy([</span><span class="s2">in</span><span class="s0">] SAFEARRAY(VARIANT *) foo);</span>
+<span class="s0">HRESULT DoSomething();</span>
+<span class="s0">HRESULT DoSomethingElse();</span>
+<span class="s0">}</span>
+
+<span class="s0">[object,</span>
+                             <span class="s0">oleautomation,</span>
+                             <span class="s0">dual,</span>
+                             <span class="s0">uuid(f7c48a90-64ea-4bb8-abf1-b3a3aa996848)]</span>
+                             <span class="s2">interface </span><span class="s0">IMyEventInterface : IDispatch {</span>
+<span class="s0">[id(</span><span class="s3">103</span><span class="s0">)] HRESULT OnSomething();</span>
+<span class="s0">[id(</span><span class="s3">104</span><span class="s0">)] HRESULT OnSomethingElse([</span><span class="s2">out</span><span class="s0">, retval] int *px);</span>
+<span class="s0">}</span>
+
+
+<span class="s0">[uuid(fa9de8f4-20de-45fc-b079-648572428817)]</span>
+<span class="s0">coclass MyServer {</span>
+    <span class="s0">[</span><span class="s2">default</span><span class="s0">] </span><span class="s2">interface </span><span class="s0">IMyInterface;</span>
+    <span class="s0">[</span><span class="s2">default</span><span class="s0">, source] </span><span class="s2">interface </span><span class="s0">IMyEventInterface;</span>
+<span class="s0">};</span>
+<span class="s0">}</span></pre>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>patcher.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #a9b7c6;}
+.s1 { color: #cc7832;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+patcher.py</font>
+</center></td></tr></table>
+<pre>
+<span class="s1">class </span><span class="s0">Patch(object):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Implements a class decorator suitable for patching an existing class with 
+    a new namespace. 
+ 
+    For example, consider this trivial class (that your code doesn't own): 
+ 
+    &gt;&gt;&gt; class MyClass: 
+    ...     def __init__(self, param): 
+    ...         self.param = param 
+    ...     def bar(self): 
+    ...         print(&quot;orig bar&quot;) 
+ 
+    To add attributes to MyClass, you can use Patch: 
+ 
+    &gt;&gt;&gt; @Patch(MyClass) 
+    ... class JustANamespace: 
+    ...     def print_param(self): 
+    ...         print(self.param) 
+    &gt;&gt;&gt; ob = MyClass('foo') 
+    &gt;&gt;&gt; ob.print_param() 
+    foo 
+ 
+    The namespace is assigned None, so there's no mistaking the purpose 
+    &gt;&gt;&gt; JustANamespace 
+ 
+    The patcher will replace the existing methods: 
+ 
+    &gt;&gt;&gt; @Patch(MyClass) 
+    ... class SomeNamespace: 
+    ...     def bar(self): 
+    ...         print(&quot;replaced bar&quot;) 
+    &gt;&gt;&gt; ob = MyClass('foo') 
+    &gt;&gt;&gt; ob.bar() 
+    replaced bar 
+ 
+    But it will not replace methods if no_replace is indicated. 
+ 
+    &gt;&gt;&gt; @Patch(MyClass) 
+    ... class AnotherNamespace: 
+    ...     @no_replace 
+    ...     def bar(self): 
+    ...         print(&quot;candy bar&quot;) 
+    &gt;&gt;&gt; ob = MyClass('foo') 
+    &gt;&gt;&gt; ob.bar() 
+    replaced bar 
+ 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">def </span><span class="s0">__init__(self</span><span class="s1">, </span><span class="s0">target):</span>
+        <span class="s0">self.target = target</span>
+
+    <span class="s1">def </span><span class="s0">__call__(self</span><span class="s1">, </span><span class="s0">patches):</span>
+        <span class="s1">for </span><span class="s0">name</span><span class="s1">, </span><span class="s0">value </span><span class="s1">in </span><span class="s0">vars(patches).items():</span>
+            <span class="s1">if </span><span class="s0">name </span><span class="s1">in </span><span class="s0">vars(ReferenceEmptyClass):</span>
+                <span class="s1">continue</span>
+            <span class="s0">no_replace = getattr(value</span><span class="s1">, </span><span class="s3">'__no_replace'</span><span class="s1">, False</span><span class="s0">)</span>
+            <span class="s1">if </span><span class="s0">no_replace </span><span class="s1">and </span><span class="s0">hasattr(self.target</span><span class="s1">, </span><span class="s0">name):</span>
+                <span class="s1">continue</span>
+            <span class="s0">setattr(self.target</span><span class="s1">, </span><span class="s0">name</span><span class="s1">, </span><span class="s0">value)</span>
+
+<span class="s1">def </span><span class="s0">no_replace(f):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Method decorator to indicate that a method definition shall 
+    silently be ignored if it already exists in the target class. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">f.__no_replace = </span><span class="s1">True</span>
+    <span class="s1">return </span><span class="s0">f</span>
+
+<span class="s1">class </span><span class="s0">ReferenceEmptyClass(object):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    This empty class will serve as a reference for attributes present on 
+    any class. 
+    &quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<html>
+<head>
+<title>test_client.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_client.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">contextlib</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">POINTER</span><span class="s0">, </span><span class="s1">byref</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">unittest </span><span class="s0">as </span><span class="s1">ut</span>
+
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COSERVERINFO</span>
+
+<span class="s2"># create the typelib wrapper and import it</span>
+<span class="s1">comtypes.client.GetModule(</span><span class="s3">&quot;scrrun.dll&quot;</span><span class="s1">)</span>
+<span class="s0">from </span><span class="s1">comtypes.gen </span><span class="s0">import </span><span class="s1">Scripting</span>
+
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s4">3</span><span class="s0">, </span><span class="s4">0</span><span class="s1">):</span>
+    <span class="s1">text_type = str</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">text_type = unicode</span>
+
+
+<span class="s2"># HACK: Prefer to use `contextlib.redirect_stdout`, but it's New in version 3.4</span>
+<span class="s1">@contextlib.contextmanager</span>
+<span class="s0">def </span><span class="s1">silence_stdout():</span>
+    <span class="s1">old_target = sys.stdout</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">with </span><span class="s1">open(os.devnull</span><span class="s0">, </span><span class="s3">&quot;w&quot;</span><span class="s1">) </span><span class="s0">as </span><span class="s1">new_target:</span>
+            <span class="s1">sys.stdout = new_target</span>
+            <span class="s0">yield </span><span class="s1">new_target</span>
+    <span class="s0">finally</span><span class="s1">:</span>
+        <span class="s1">sys.stdout = old_target</span>
+
+
+<span class="s0">class </span><span class="s1">Test_GetModule(ut.TestCase):</span>
+    <span class="s0">def </span><span class="s1">test_tlib_string(self):</span>
+        <span class="s1">mod = comtypes.client.GetModule(</span><span class="s3">&quot;scrrun.dll&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s0">def </span><span class="s1">test_abspath(self):</span>
+        <span class="s1">mod = comtypes.client.GetModule(Scripting.typelib_path)</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s1">@ut.skipUnless(</span>
+        <span class="s1">os.path.splitdrive(Scripting.typelib_path)[</span><span class="s4">0</span><span class="s1">] == os.path.splitdrive(__file__)[</span><span class="s4">0</span><span class="s1">]</span><span class="s0">,</span>
+        <span class="s3">&quot;This depends on typelib and test module are in same drive&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_relpath(self):</span>
+        <span class="s1">relpath = os.path.relpath(Scripting.typelib_path</span><span class="s0">, </span><span class="s1">__file__)</span>
+        <span class="s1">mod = comtypes.client.GetModule(relpath)</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s0">def </span><span class="s1">test_libid_and_version_numbers(self):</span>
+        <span class="s1">mod = comtypes.client.GetModule(Scripting.Library._reg_typelib_)</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s0">def </span><span class="s1">test_one_length_sequence_containing_libid(self):</span>
+        <span class="s1">libid</span><span class="s0">, </span><span class="s1">_</span><span class="s0">, </span><span class="s1">_ = Scripting.Library._reg_typelib_</span>
+        <span class="s1">mod = comtypes.client.GetModule((libid</span><span class="s0">,</span><span class="s1">))</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s0">def </span><span class="s1">test_obj_has_reg_libid_and_reg_version(self):</span>
+        <span class="s1">typelib = Scripting.Library._reg_typelib_</span>
+        <span class="s1">libid</span><span class="s0">, </span><span class="s1">version = typelib[</span><span class="s4">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">typelib[</span><span class="s4">1</span><span class="s1">:]</span>
+        <span class="s2"># HACK: Prefer to use Mock, but `unittest.mock` is not available in py27!</span>
+        <span class="s1">info = type(</span><span class="s3">&quot;info&quot;</span><span class="s0">, </span><span class="s1">(object</span><span class="s0">,</span><span class="s1">)</span><span class="s0">, </span><span class="s1">dict(_reg_libid_=libid</span><span class="s0">, </span><span class="s1">_reg_version_=version))</span>
+        <span class="s1">mod = comtypes.client.GetModule(info)</span>
+        <span class="s1">self.assertIs(mod</span><span class="s0">, </span><span class="s1">Scripting)</span>
+
+    <span class="s0">def </span><span class="s1">test_clsid(self):</span>
+        <span class="s1">clsid = comtypes.GUID.from_progid(</span><span class="s3">&quot;MediaPlayer.MediaPlayer&quot;</span><span class="s1">)</span>
+        <span class="s1">mod = comtypes.client.GetModule(clsid)</span>
+        <span class="s1">self.assertEqual(mod.MediaPlayer._reg_clsid_</span><span class="s0">, </span><span class="s1">clsid)</span>
+
+    <span class="s0">def </span><span class="s1">test_imports_IEnumVARIANT_from_other_generated_modules(self):</span>
+        <span class="s2"># NOTE: `codegenerator` generates code that contains unused imports,</span>
+        <span class="s2"># but removing them are attracting wierd bugs in library-wrappers</span>
+        <span class="s2"># which depend on externals.</span>
+        <span class="s2"># NOTE: `mscorlib`, which imports `IEnumVARIANT` from `stdole`.</span>
+        <span class="s1">comtypes.client.GetModule((</span><span class="s3">&quot;{BED7F4EA-1A96-11D2-8F08-00A0C9A6186D}&quot;</span><span class="s0">,</span><span class="s1">))</span>
+
+    <span class="s0">def </span><span class="s1">test_no_replacing_Patch_namespace(self):</span>
+        <span class="s2"># NOTE: An object named `Patch` is defined in some dll.</span>
+        <span class="s2"># Depending on how the namespace is defined in the static module,</span>
+        <span class="s2"># `Patch` in generated modules will be replaced with</span>
+        <span class="s2"># `comtypes.patcher.Patch`, and generating module will fail.</span>
+        <span class="s2"># NOTE: `WindowsInstaller`, which has `Patch` definition in dll.</span>
+        <span class="s1">comtypes.client.GetModule(</span><span class="s3">&quot;msi.dll&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">Test_CreateObject(ut.TestCase):</span>
+    <span class="s0">def </span><span class="s1">test_progid(self):</span>
+        <span class="s2"># create from ProgID</span>
+        <span class="s1">obj = comtypes.client.CreateObject(</span><span class="s3">&quot;Scripting.Dictionary&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertTrue(isinstance(obj</span><span class="s0">, </span><span class="s1">POINTER(Scripting.IDictionary)))</span>
+
+    <span class="s0">def </span><span class="s1">test_clsid(self):</span>
+        <span class="s2"># create from the CoClass' clsid</span>
+        <span class="s1">obj = comtypes.client.CreateObject(Scripting.Dictionary)</span>
+        <span class="s1">self.assertTrue(isinstance(obj</span><span class="s0">, </span><span class="s1">POINTER(Scripting.IDictionary)))</span>
+
+    <span class="s0">def </span><span class="s1">test_clsid_string(self):</span>
+        <span class="s2"># create from string clsid</span>
+        <span class="s1">comtypes.client.CreateObject(text_type(Scripting.Dictionary._reg_clsid_))</span>
+        <span class="s1">comtypes.client.CreateObject(str(Scripting.Dictionary._reg_clsid_))</span>
+
+    <span class="s1">@ut.skip(</span>
+            <span class="s3">&quot;This test uses IE which is not available on all machines anymore. &quot;</span>
+            <span class="s3">&quot;Find another API to use.&quot;</span>
+    <span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_remote(self):</span>
+        <span class="s1">ie = comtypes.client.CreateObject(</span><span class="s3">&quot;InternetExplorer.Application&quot;</span><span class="s0">,</span>
+                                          <span class="s1">machine=</span><span class="s3">&quot;localhost&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(ie.Visible</span><span class="s0">, False</span><span class="s1">)</span>
+        <span class="s1">ie.Visible = </span><span class="s4">1</span>
+        <span class="s2"># on a remote machine, this may not work.  Probably depends on</span>
+        <span class="s2"># how the server is run.</span>
+        <span class="s1">self.assertEqual(ie.Visible</span><span class="s0">, True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(</span><span class="s4">0</span><span class="s0">, </span><span class="s1">ie.Quit()) </span><span class="s2"># 0 == S_OK</span>
+
+    <span class="s1">@ut.skip(</span>
+            <span class="s3">&quot;This test uses IE which is not available on all machines anymore. &quot;</span>
+            <span class="s3">&quot;Find another API to use.&quot;</span>
+    <span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_server_info(self):</span>
+        <span class="s1">serverinfo = COSERVERINFO()</span>
+        <span class="s1">serverinfo.pwszName = </span><span class="s3">'localhost'</span>
+        <span class="s1">pServerInfo = byref(serverinfo)</span>
+
+        <span class="s1">self.assertRaises(ValueError</span><span class="s0">, </span><span class="s1">comtypes.client.CreateObject</span><span class="s0">,</span>
+                <span class="s3">&quot;InternetExplorer.Application&quot;</span><span class="s0">, </span><span class="s1">machine=</span><span class="s3">'localhost'</span><span class="s0">,</span>
+                <span class="s1">pServerInfo=pServerInfo)</span>
+        <span class="s1">ie = comtypes.client.CreateObject(</span><span class="s3">&quot;InternetExplorer.Application&quot;</span><span class="s0">,</span>
+                                          <span class="s1">pServerInfo=pServerInfo)</span>
+        <span class="s1">self.assertEqual(ie.Visible</span><span class="s0">, False</span><span class="s1">)</span>
+        <span class="s1">ie.Visible = </span><span class="s4">1</span>
+        <span class="s2"># on a remote machine, this may not work.  Probably depends on</span>
+        <span class="s2"># how the server is run.</span>
+        <span class="s1">self.assertEqual(ie.Visible</span><span class="s0">, True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(</span><span class="s4">0</span><span class="s0">, </span><span class="s1">ie.Quit()) </span><span class="s2"># 0 == S_OK</span>
+
+
+<span class="s0">class </span><span class="s1">Test_Constants(ut.TestCase):</span>
+    <span class="s0">def </span><span class="s1">test_punk(self):</span>
+        <span class="s1">obj = comtypes.client.CreateObject(Scripting.Dictionary)</span>
+        <span class="s1">consts = comtypes.client.Constants(obj)</span>
+        <span class="s1">self.assertEqual(consts.BinaryCompare</span><span class="s0">, </span><span class="s1">Scripting.BinaryCompare)</span>
+        <span class="s1">self.assertEqual(consts.TextCompare</span><span class="s0">, </span><span class="s1">Scripting.TextCompare)</span>
+        <span class="s1">self.assertEqual(consts.DatabaseCompare</span><span class="s0">, </span><span class="s1">Scripting.DatabaseCompare)</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(AttributeError):</span>
+            <span class="s1">consts.Foo</span>
+        <span class="s1">CompareMethod = consts.CompareMethod</span>
+        <span class="s1">self.assertEqual(CompareMethod.BinaryCompare</span><span class="s0">, </span><span class="s1">Scripting.BinaryCompare)</span>
+        <span class="s1">self.assertEqual(CompareMethod.TextCompare</span><span class="s0">, </span><span class="s1">Scripting.TextCompare)</span>
+        <span class="s1">self.assertEqual(CompareMethod.DatabaseCompare</span><span class="s0">, </span><span class="s1">Scripting.DatabaseCompare)</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(AttributeError):</span>
+            <span class="s1">CompareMethod.Foo</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(AttributeError):</span>
+            <span class="s1">CompareMethod.TextCompare = </span><span class="s4">1</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(AttributeError):</span>
+            <span class="s1">CompareMethod.Foo = </span><span class="s4">1</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod[</span><span class="s3">&quot;Foo&quot;</span><span class="s1">] = </span><span class="s4">1</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s0">del </span><span class="s1">CompareMethod[</span><span class="s3">&quot;Foo&quot;</span><span class="s1">]</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod |= {</span><span class="s3">&quot;Foo&quot;</span><span class="s1">: </span><span class="s4">3</span><span class="s1">}</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod.clear()</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod.pop(</span><span class="s3">&quot;TextCompare&quot;</span><span class="s1">)</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod.popitem()</span>
+        <span class="s0">with </span><span class="s1">self.assertRaises(TypeError):</span>
+            <span class="s1">CompareMethod.setdefault(</span><span class="s3">&quot;Bar&quot;</span><span class="s0">, </span><span class="s4">3</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_alias(self):</span>
+        <span class="s1">obj = comtypes.client.CreateObject(Scripting.FileSystemObject)</span>
+        <span class="s1">consts = comtypes.client.Constants(obj)</span>
+        <span class="s1">StandardStreamTypes = consts.StandardStreamTypes</span>
+        <span class="s1">real_name = </span><span class="s3">&quot;__MIDL___MIDL_itf_scrrun_0001_0001_0003&quot;</span>
+        <span class="s1">self.assertEqual(StandardStreamTypes</span><span class="s0">, </span><span class="s1">getattr(consts</span><span class="s0">, </span><span class="s1">real_name))</span>
+        <span class="s1">self.assertEqual(StandardStreamTypes.StdIn</span><span class="s0">, </span><span class="s1">Scripting.StdIn)</span>
+        <span class="s1">self.assertEqual(StandardStreamTypes.StdOut</span><span class="s0">, </span><span class="s1">Scripting.StdOut)</span>
+        <span class="s1">self.assertEqual(StandardStreamTypes.StdErr</span><span class="s0">, </span><span class="s1">Scripting.StdErr)</span>
+
+    <span class="s0">def </span><span class="s1">test_progid(self):</span>
+        <span class="s1">consts = comtypes.client.Constants(</span><span class="s3">&quot;scrrun.dll&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(consts.BinaryCompare</span><span class="s0">, </span><span class="s1">Scripting.BinaryCompare)</span>
+        <span class="s1">self.assertEqual(consts.TextCompare</span><span class="s0">, </span><span class="s1">Scripting.TextCompare)</span>
+        <span class="s1">self.assertEqual(consts.DatabaseCompare</span><span class="s0">, </span><span class="s1">Scripting.DatabaseCompare)</span>
+
+    <span class="s0">def </span><span class="s1">test_returns_other_than_enum_members(self):</span>
+        <span class="s1">obj = comtypes.client.CreateObject(</span><span class="s3">&quot;SAPI.SpVoice&quot;</span><span class="s1">)</span>
+        <span class="s0">from </span><span class="s1">comtypes.gen </span><span class="s0">import </span><span class="s1">SpeechLib </span><span class="s0">as </span><span class="s1">sapi</span>
+        <span class="s1">consts = comtypes.client.Constants(obj)</span>
+        <span class="s2"># int (Constant c_int)</span>
+        <span class="s1">self.assertEqual(consts.Speech_Max_Word_Length</span><span class="s0">, </span><span class="s1">sapi.Speech_Max_Word_Length)</span>
+        <span class="s2"># str (Constant BSTR)</span>
+        <span class="s1">self.assertEqual(consts.SpeechVoiceSkipTypeSentence</span><span class="s0">, </span><span class="s1">sapi.SpeechVoiceSkipTypeSentence)</span>
+        <span class="s1">self.assertEqual(consts.SpeechAudioFormatGUIDWave</span><span class="s0">, </span><span class="s1">sapi.SpeechAudioFormatGUIDWave)</span>
+        <span class="s1">self.assertEqual(consts.SpeechRegistryLocalMachineRoot</span><span class="s0">, </span><span class="s1">sapi.SpeechRegistryLocalMachineRoot)</span>
+        <span class="s1">self.assertEqual(consts.SpeechGrammarTagDictation</span><span class="s0">, </span><span class="s1">sapi.SpeechGrammarTagDictation)</span>
+        <span class="s2"># float (Constant c_float)</span>
+        <span class="s1">self.assertEqual(consts.Speech_Default_Weight</span><span class="s0">, </span><span class="s1">sapi.Speech_Default_Weight)</span>
+
+    <span class="s1">@ut.skipUnless(sys.version_info &gt;= (</span><span class="s4">3</span><span class="s0">, </span><span class="s4">0</span><span class="s1">)</span><span class="s0">, </span><span class="s3">&quot;Some words are not in Python2 keywords&quot;</span><span class="s1">)</span>
+    <span class="s0">def </span><span class="s1">test_munged_definitions(self):</span>
+        <span class="s0">with </span><span class="s1">silence_stdout():  </span><span class="s2"># supress warnings</span>
+            <span class="s1">MSVidCtlLib = comtypes.client.GetModule(</span><span class="s3">&quot;msvidctl.dll&quot;</span><span class="s1">)</span>
+            <span class="s1">consts = comtypes.client.Constants(</span><span class="s3">&quot;msvidctl.dll&quot;</span><span class="s1">)</span>
+        <span class="s2"># `None` is a Python3 keyword.</span>
+        <span class="s1">self.assertEqual(consts.MSVidCCService.None_</span><span class="s0">, </span><span class="s1">consts.None_)</span>
+        <span class="s1">self.assertEqual(MSVidCtlLib.None_</span><span class="s0">, </span><span class="s1">consts.None_)</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">ut.main()</span>
+</pre>
+</body>
+</html>

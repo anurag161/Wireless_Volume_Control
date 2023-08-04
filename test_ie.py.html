@@ -1,0 +1,135 @@
+<html>
+<head>
+<title>test_ie.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_ie.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest </span><span class="s0">as </span><span class="s1">ut</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s0">import </span><span class="s1">comtypes.test</span>
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span><span class="s0">, </span><span class="s1">GetEvents</span>
+
+<span class="s1">comtypes.test.requires(</span><span class="s2">&quot;ui&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">setUpModule():</span>
+    <span class="s0">raise </span><span class="s1">ut.SkipTest(</span><span class="s2">&quot;External test dependencies like this seem bad.  Find a different built-in &quot;</span>
+                      <span class="s2">&quot;win32 API to use.&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">EventSink:</span>
+    <span class="s0">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self._events = []</span>
+
+    <span class="s3"># some DWebBrowserEvents</span>
+    <span class="s0">def </span><span class="s1">OnVisible(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;OnVisible&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;OnVisible&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">BeforeNavigate(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;BeforeNavigate&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;BeforeNavigate&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">NavigateComplete(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;NavigateComplete&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;NavigateComplete&quot;</span><span class="s1">)</span>
+
+    <span class="s3"># some DWebBrowserEvents2</span>
+    <span class="s0">def </span><span class="s1">BeforeNavigate2(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;BeforeNavigate2&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;BeforeNavigate2&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">NavigateComplete2(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;NavigateComplete2&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;NavigateComplete2&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">DocumentComplete(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args):</span>
+<span class="s3">##        print &quot;DocumentComplete&quot;, args</span>
+        <span class="s1">self._events.append(</span><span class="s2">&quot;DocumentComplete&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">POINT(Structure):</span>
+    <span class="s1">_fields_ = [(</span><span class="s2">&quot;x&quot;</span><span class="s0">, </span><span class="s1">c_long)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;y&quot;</span><span class="s0">, </span><span class="s1">c_long)]</span>
+
+<span class="s0">class </span><span class="s1">MSG(Structure):</span>
+    <span class="s1">_fields_ = [(</span><span class="s2">&quot;hWnd&quot;</span><span class="s0">, </span><span class="s1">c_ulong)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;message&quot;</span><span class="s0">, </span><span class="s1">c_uint)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;wParam&quot;</span><span class="s0">, </span><span class="s1">c_ulong)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;lParam&quot;</span><span class="s0">, </span><span class="s1">c_ulong)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;time&quot;</span><span class="s0">, </span><span class="s1">c_ulong)</span><span class="s0">,</span>
+                <span class="s1">(</span><span class="s2">&quot;pt&quot;</span><span class="s0">, </span><span class="s1">POINT)]</span>
+
+<span class="s0">def </span><span class="s1">PumpWaitingMessages():</span>
+    <span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">windll</span><span class="s0">, </span><span class="s1">byref</span>
+    <span class="s1">user32 = windll.user32</span>
+    <span class="s1">msg = MSG()</span>
+    <span class="s1">PM_REMOVE = </span><span class="s4">0x0001</span>
+    <span class="s0">while </span><span class="s1">user32.PeekMessageA(byref(msg)</span><span class="s0">, </span><span class="s4">0</span><span class="s0">, </span><span class="s4">0</span><span class="s0">, </span><span class="s4">0</span><span class="s0">, </span><span class="s1">PM_REMOVE):</span>
+        <span class="s1">user32.TranslateMessage(byref(msg))</span>
+        <span class="s1">user32.DispatchMessageA(byref(msg))</span>
+
+<span class="s0">class </span><span class="s1">Test(ut.TestCase):</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s0">import </span><span class="s1">gc</span>
+        <span class="s1">gc.collect()</span>
+        <span class="s0">import </span><span class="s1">time</span>
+        <span class="s1">time.sleep(</span><span class="s4">2</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">test_default_eventinterface(self):</span>
+        <span class="s1">sink = EventSink()</span>
+        <span class="s1">ie = CreateObject(</span><span class="s2">&quot;InternetExplorer.Application&quot;</span><span class="s1">)</span>
+        <span class="s1">conn = GetEvents(ie</span><span class="s0">, </span><span class="s1">sink=sink)</span>
+        <span class="s1">ie.Visible = </span><span class="s0">True</span>
+        <span class="s1">ie.Navigate2(URL=</span><span class="s2">&quot;http://docs.python.org/&quot;</span><span class="s0">, </span><span class="s1">Flags=</span><span class="s4">0</span><span class="s1">)</span>
+        <span class="s0">import </span><span class="s1">time</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">50</span><span class="s1">):</span>
+            <span class="s1">PumpWaitingMessages()</span>
+            <span class="s1">time.sleep(</span><span class="s4">0.1</span><span class="s1">)</span>
+        <span class="s1">ie.Visible = </span><span class="s0">False</span>
+        <span class="s1">ie.Quit()</span>
+
+        <span class="s1">self.assertEqual(sink._events</span><span class="s0">, </span><span class="s1">[</span><span class="s2">'OnVisible'</span><span class="s0">, </span><span class="s2">'BeforeNavigate2'</span><span class="s0">,</span>
+                                            <span class="s2">'NavigateComplete2'</span><span class="s0">, </span><span class="s2">'DocumentComplete'</span><span class="s0">,</span>
+                                            <span class="s2">'OnVisible'</span><span class="s1">])</span>
+
+        <span class="s0">del </span><span class="s1">ie</span>
+        <span class="s0">del </span><span class="s1">conn</span>
+
+    <span class="s0">def </span><span class="s1">test_nondefault_eventinterface(self):</span>
+        <span class="s1">sink = EventSink()</span>
+        <span class="s1">ie = CreateObject(</span><span class="s2">&quot;InternetExplorer.Application&quot;</span><span class="s1">)</span>
+        <span class="s0">import </span><span class="s1">comtypes.gen.SHDocVw </span><span class="s0">as </span><span class="s1">mod</span>
+        <span class="s1">conn = GetEvents(ie</span><span class="s0">, </span><span class="s1">sink</span><span class="s0">, </span><span class="s1">interface=mod.DWebBrowserEvents)</span>
+
+        <span class="s1">ie.Visible = </span><span class="s0">True</span>
+        <span class="s1">ie.Navigate2(Flags=</span><span class="s4">0</span><span class="s0">, </span><span class="s1">URL=</span><span class="s2">&quot;http://docs.python.org/&quot;</span><span class="s1">)</span>
+        <span class="s0">import </span><span class="s1">time</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">50</span><span class="s1">):</span>
+            <span class="s1">PumpWaitingMessages()</span>
+            <span class="s1">time.sleep(</span><span class="s4">0.1</span><span class="s1">)</span>
+        <span class="s1">ie.Visible = </span><span class="s0">False</span>
+        <span class="s1">ie.Quit()</span>
+
+        <span class="s1">self.assertEqual(sink._events</span><span class="s0">, </span><span class="s1">[</span><span class="s2">'BeforeNavigate'</span><span class="s0">, </span><span class="s2">'NavigateComplete'</span><span class="s1">])</span>
+        <span class="s0">del </span><span class="s1">ie</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">ut.main()</span>
+</pre>
+</body>
+</html>

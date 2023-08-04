@@ -1,0 +1,195 @@
+<html>
+<head>
+<title>dynamic.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dynamic.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">ctypes</span>
+<span class="s0">import </span><span class="s1">comtypes.automation</span>
+<span class="s0">import </span><span class="s1">comtypes.typeinfo</span>
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+<span class="s0">import </span><span class="s1">comtypes.client.lazybind</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMError</span><span class="s0">, </span><span class="s1">IUnknown</span><span class="s0">, </span><span class="s1">_is_object</span>
+<span class="s0">import </span><span class="s1">comtypes.hresult </span><span class="s0">as </span><span class="s1">hres</span>
+
+<span class="s2"># These errors generally mean the property or method exists,</span>
+<span class="s2"># but can't be used in this context - eg, property instead of a method, etc.</span>
+<span class="s2"># Used to determine if we have a real error or not.</span>
+<span class="s1">ERRORS_BAD_CONTEXT = [</span>
+    <span class="s1">hres.DISP_E_MEMBERNOTFOUND</span><span class="s0">,</span>
+    <span class="s1">hres.DISP_E_BADPARAMCOUNT</span><span class="s0">,</span>
+    <span class="s1">hres.DISP_E_PARAMNOTOPTIONAL</span><span class="s0">,</span>
+    <span class="s1">hres.DISP_E_TYPEMISMATCH</span><span class="s0">,</span>
+    <span class="s1">hres.E_INVALIDARG</span><span class="s0">,</span>
+<span class="s1">]</span>
+
+<span class="s0">def </span><span class="s1">Dispatch(obj):</span>
+    <span class="s2"># Wrap an object in a Dispatch instance, exposing methods and properties</span>
+    <span class="s2"># via fully dynamic dispatch</span>
+    <span class="s0">if </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">_Dispatch):</span>
+        <span class="s0">return </span><span class="s1">obj</span>
+    <span class="s0">if </span><span class="s1">isinstance(obj</span><span class="s0">, </span><span class="s1">ctypes.POINTER(comtypes.automation.IDispatch)):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">tinfo = obj.GetTypeInfo(</span><span class="s3">0</span><span class="s1">)</span>
+        <span class="s0">except </span><span class="s1">(comtypes.COMError</span><span class="s0">, </span><span class="s1">WindowsError):</span>
+            <span class="s0">return </span><span class="s1">_Dispatch(obj)</span>
+        <span class="s0">return </span><span class="s1">comtypes.client.lazybind.Dispatch(obj</span><span class="s0">, </span><span class="s1">tinfo)</span>
+    <span class="s0">return </span><span class="s1">obj</span>
+
+<span class="s0">class </span><span class="s1">MethodCaller:</span>
+    <span class="s2"># Wrong name: does not only call methods but also handle</span>
+    <span class="s2"># property accesses.</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">_id</span><span class="s0">, </span><span class="s1">_obj):</span>
+        <span class="s1">self._id = _id</span>
+        <span class="s1">self._obj = _obj</span>
+
+    <span class="s0">def </span><span class="s1">__call__(self</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s0">return </span><span class="s1">self._obj._comobj.Invoke(self._id</span><span class="s0">, </span><span class="s1">*args)</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s0">return </span><span class="s1">self._obj._comobj.Invoke(self._id</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">,</span>
+                                        <span class="s1">**dict(_invkind=comtypes.automation.DISPATCH_PROPERTYGET))</span>
+
+    <span class="s0">def </span><span class="s1">__setitem__(self</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s0">if </span><span class="s1">_is_object(args[-</span><span class="s3">1</span><span class="s1">]):</span>
+            <span class="s1">self._obj._comobj.Invoke(self._id</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">,</span>
+                                        <span class="s1">**dict(_invkind=comtypes.automation.DISPATCH_PROPERTYPUTREF))</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">self._obj._comobj.Invoke(self._id</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">,</span>
+                                        <span class="s1">**dict(_invkind=comtypes.automation.DISPATCH_PROPERTYPUT))</span>
+
+<span class="s0">class </span><span class="s1">_Dispatch(object):</span>
+    <span class="s2"># Expose methods and properties via fully dynamic dispatch</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">comobj):</span>
+        <span class="s1">self.__dict__[</span><span class="s4">&quot;_comobj&quot;</span><span class="s1">] = comobj</span>
+        <span class="s1">self.__dict__[</span><span class="s4">&quot;_ids&quot;</span><span class="s1">] = {} </span><span class="s2"># Tiny optimization: trying not to use GetIDsOfNames more than once</span>
+        <span class="s1">self.__dict__[</span><span class="s4">&quot;_methods&quot;</span><span class="s1">] = set()</span>
+
+    <span class="s0">def </span><span class="s1">__enum(self):</span>
+        <span class="s1">e = self._comobj.Invoke(-</span><span class="s3">4</span><span class="s1">) </span><span class="s2"># DISPID_NEWENUM</span>
+        <span class="s0">return </span><span class="s1">e.QueryInterface(comtypes.automation.IEnumVARIANT)</span>
+
+    <span class="s0">def </span><span class="s1">__cmp__(self</span><span class="s0">, </span><span class="s1">other):</span>
+        <span class="s0">if not </span><span class="s1">isinstance(other</span><span class="s0">, </span><span class="s1">_Dispatch):</span>
+            <span class="s0">return </span><span class="s3">1</span>
+        <span class="s0">return </span><span class="s1">cmp(self._comobj</span><span class="s0">, </span><span class="s1">other._comobj)</span>
+
+    <span class="s0">def </span><span class="s1">__hash__(self):</span>
+        <span class="s0">return </span><span class="s1">hash(self._comobj)</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__(self</span><span class="s0">, </span><span class="s1">index):</span>
+        <span class="s1">enum = self.__enum()</span>
+        <span class="s0">if </span><span class="s1">index &gt; </span><span class="s3">0</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s3">0 </span><span class="s1">!= enum.Skip(index):</span>
+                <span class="s0">raise </span><span class="s1">IndexError(</span><span class="s4">&quot;index out of range&quot;</span><span class="s1">)</span>
+        <span class="s1">item</span><span class="s0">, </span><span class="s1">fetched = enum.Next(</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s0">if not </span><span class="s1">fetched:</span>
+            <span class="s0">raise </span><span class="s1">IndexError(</span><span class="s4">&quot;index out of range&quot;</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">item</span>
+
+    <span class="s0">def </span><span class="s1">QueryInterface(self</span><span class="s0">, </span><span class="s1">*args):</span>
+        <span class="s5">&quot;QueryInterface is forwarded to the real com object.&quot;</span>
+        <span class="s0">return </span><span class="s1">self._comobj.QueryInterface(*args)</span>
+
+    <span class="s0">def </span><span class="s1">_FlagAsMethod(self</span><span class="s0">, </span><span class="s1">*names):</span>
+        <span class="s5">&quot;&quot;&quot;Flag these attribute names as being methods. 
+        Some objects do not correctly differentiate methods and 
+        properties, leading to problems when calling these methods. 
+ 
+        Specifically, trying to say: ob.SomeFunc() 
+        may yield an exception &quot;None object is not callable&quot; 
+        In this case, an attempt to fetch the *property*has worked 
+        and returned None, rather than indicating it is really a method. 
+        Calling: ob._FlagAsMethod(&quot;SomeFunc&quot;) 
+        should then allow this to work. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self._methods.update(names)</span>
+
+    <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s0">if </span><span class="s1">name.startswith(</span><span class="s4">&quot;__&quot;</span><span class="s1">) </span><span class="s0">and </span><span class="s1">name.endswith(</span><span class="s4">&quot;__&quot;</span><span class="s1">):</span>
+            <span class="s0">raise </span><span class="s1">AttributeError(name)</span>
+<span class="s2">##        tc = self._comobj.GetTypeInfo(0).QueryInterface(comtypes.typeinfo.ITypeComp)</span>
+<span class="s2">##        dispid = tc.Bind(name)[1].memid</span>
+        <span class="s1">dispid = self._ids.get(name)</span>
+        <span class="s0">if not </span><span class="s1">dispid:</span>
+            <span class="s1">dispid = self._comobj.GetIDsOfNames(name)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s1">self._ids[name] = dispid</span>
+
+        <span class="s0">if </span><span class="s1">name </span><span class="s0">in </span><span class="s1">self._methods:</span>
+            <span class="s1">result = MethodCaller(dispid</span><span class="s0">, </span><span class="s1">self)</span>
+            <span class="s1">self.__dict__[name] = result</span>
+            <span class="s0">return </span><span class="s1">result</span>
+
+        <span class="s1">flags = comtypes.automation.DISPATCH_PROPERTYGET</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">result = self._comobj.Invoke(dispid</span><span class="s0">, </span><span class="s1">_invkind=flags)</span>
+        <span class="s0">except </span><span class="s1">COMError </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s1">(hresult</span><span class="s0">, </span><span class="s1">text</span><span class="s0">, </span><span class="s1">details) = err.args</span>
+            <span class="s0">if </span><span class="s1">hresult </span><span class="s0">in </span><span class="s1">ERRORS_BAD_CONTEXT:</span>
+                <span class="s1">result = MethodCaller(dispid</span><span class="s0">, </span><span class="s1">self)</span>
+                <span class="s1">self.__dict__[name] = result</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s2"># The line break is important for 2to3 to work correctly</span>
+                <span class="s0">raise</span>
+        <span class="s0">except</span><span class="s1">:</span>
+            <span class="s2"># The line break is important for 2to3 to work correctly</span>
+            <span class="s0">raise</span>
+
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">__setattr__(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">value):</span>
+        <span class="s1">dispid = self._ids.get(name)</span>
+        <span class="s0">if not </span><span class="s1">dispid:</span>
+            <span class="s1">dispid = self._comobj.GetIDsOfNames(name)[</span><span class="s3">0</span><span class="s1">]</span>
+            <span class="s1">self._ids[name] = dispid</span>
+        <span class="s2"># Detect whether to use DISPATCH_PROPERTYPUT or</span>
+        <span class="s2"># DISPATCH_PROPERTYPUTREF</span>
+        <span class="s1">flags = </span><span class="s3">8 </span><span class="s0">if </span><span class="s1">_is_object(value) </span><span class="s0">else </span><span class="s3">4</span>
+        <span class="s0">return </span><span class="s1">self._comobj.Invoke(dispid</span><span class="s0">, </span><span class="s1">value</span><span class="s0">, </span><span class="s1">_invkind=flags)</span>
+
+    <span class="s0">def </span><span class="s1">__iter__(self):</span>
+        <span class="s0">return </span><span class="s1">_Collection(self.__enum())</span>
+
+<span class="s2">##    def __setitem__(self, index, value):</span>
+<span class="s2">##        self._comobj.Invoke(-3, index, value,</span>
+<span class="s2">##                            _invkind=comtypes.automation.DISPATCH_PROPERTYPUT|comtypes.automation.DISPATCH_PROPERTYPUTREF)</span>
+
+<span class="s0">class </span><span class="s1">_Collection(object):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">enum):</span>
+        <span class="s1">self.enum = enum</span>
+
+    <span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s3">3</span><span class="s0">, </span><span class="s3">0</span><span class="s1">):</span>
+        <span class="s0">def </span><span class="s1">__next__(self):</span>
+            <span class="s1">item</span><span class="s0">, </span><span class="s1">fetched = self.enum.Next(</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">fetched:</span>
+                <span class="s0">return </span><span class="s1">item</span>
+            <span class="s0">raise </span><span class="s1">StopIteration</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">def </span><span class="s1">next(self):</span>
+            <span class="s1">item</span><span class="s0">, </span><span class="s1">fetched = self.enum.Next(</span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">fetched:</span>
+                <span class="s0">return </span><span class="s1">item</span>
+            <span class="s0">raise </span><span class="s1">StopIteration</span>
+
+    <span class="s0">def </span><span class="s1">__iter__(self):</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+<span class="s1">__all__ = [</span><span class="s4">&quot;Dispatch&quot;</span><span class="s1">]</span>
+</pre>
+</body>
+</html>

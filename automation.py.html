@@ -1,0 +1,115 @@
+<html>
+<head>
+<title>automation.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+automation.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">logging</span>
+
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">*</span>
+<span class="s0">from </span><span class="s1">comtypes.hresult </span><span class="s0">import </span><span class="s1">*</span>
+
+<span class="s0">from </span><span class="s1">comtypes </span><span class="s0">import </span><span class="s1">COMObject</span><span class="s0">, </span><span class="s1">IUnknown</span>
+<span class="s0">from </span><span class="s1">comtypes.automation </span><span class="s0">import </span><span class="s1">IDispatch</span><span class="s0">, </span><span class="s1">IEnumVARIANT</span>
+
+<span class="s1">logger = logging.getLogger(__name__)</span>
+
+<span class="s2"># XXX When the COMCollection class is ready, insert it into __all__</span>
+<span class="s1">__all__ = [</span><span class="s3">&quot;VARIANTEnumerator&quot;</span><span class="s1">]</span>
+
+
+<span class="s0">class </span><span class="s1">VARIANTEnumerator(COMObject):</span>
+    <span class="s4">&quot;&quot;&quot;A universal VARIANTEnumerator class.  Instantiate it with a 
+    collection of items that support the IDispatch interface.&quot;&quot;&quot;</span>
+    <span class="s1">_com_interfaces_ = [IEnumVARIANT]</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">items):</span>
+        <span class="s1">self.items = items </span><span class="s2"># keep, so that we can restore our iterator (in Reset, and Clone).</span>
+        <span class="s1">self.seq = iter(self.items)</span>
+        <span class="s1">super(VARIANTEnumerator</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+
+    <span class="s0">def </span><span class="s1">Next(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">celt</span><span class="s0">, </span><span class="s1">rgVar</span><span class="s0">, </span><span class="s1">pCeltFetched):</span>
+        <span class="s0">if not </span><span class="s1">rgVar: </span><span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s0">if not </span><span class="s1">pCeltFetched: pCeltFetched = [</span><span class="s0">None</span><span class="s1">]</span>
+        <span class="s1">pCeltFetched[</span><span class="s5">0</span><span class="s1">] = </span><span class="s5">0</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">range(celt):</span>
+                <span class="s1">item = next(self.seq)</span>
+                <span class="s1">p = item.QueryInterface(IDispatch)</span>
+                <span class="s1">rgVar[index].value = p</span>
+                <span class="s1">pCeltFetched[</span><span class="s5">0</span><span class="s1">] += </span><span class="s5">1</span>
+        <span class="s0">except </span><span class="s1">StopIteration:</span>
+            <span class="s0">pass</span>
+<span class="s2">##        except:</span>
+<span class="s2">##            # ReportException? return E_FAIL?</span>
+<span class="s2">##            import traceback</span>
+<span class="s2">##            traceback.print_exc()</span>
+
+        <span class="s0">if </span><span class="s1">pCeltFetched[</span><span class="s5">0</span><span class="s1">] == celt:</span>
+            <span class="s0">return </span><span class="s1">S_OK</span>
+        <span class="s0">return </span><span class="s1">S_FALSE</span>
+
+    <span class="s0">def </span><span class="s1">Skip(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">celt):</span>
+        <span class="s2"># skip some elements.</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">range(celt):</span>
+                <span class="s1">next(self.seq)</span>
+        <span class="s0">except </span><span class="s1">StopIteration:</span>
+            <span class="s0">return </span><span class="s1">S_FALSE</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+    <span class="s0">def </span><span class="s1">Reset(self</span><span class="s0">, </span><span class="s1">this):</span>
+        <span class="s1">self.seq = iter(self.items)</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+    <span class="s2"># Clone not implemented</span>
+
+<span class="s2">################################################################</span>
+
+<span class="s2"># XXX Shouldn't this be a mixin class?</span>
+<span class="s2"># And isn't this class borked anyway?</span>
+
+<span class="s0">class </span><span class="s1">COMCollection(COMObject):</span>
+    <span class="s4">&quot;&quot;&quot;Abstract base class which implements Count, Item, and _NewEnum.&quot;&quot;&quot;</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">itemtype</span><span class="s0">, </span><span class="s1">collection):</span>
+        <span class="s1">self.collection = collection</span>
+        <span class="s1">self.itemtype = itemtype</span>
+        <span class="s1">super(COMCollection</span><span class="s0">, </span><span class="s1">self).__init__()</span>
+
+    <span class="s0">def </span><span class="s1">_get_Item(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">pathname</span><span class="s0">, </span><span class="s1">pitem):</span>
+        <span class="s0">if not </span><span class="s1">pitem:</span>
+            <span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s1">item = self.itemtype(pathname)</span>
+        <span class="s0">return </span><span class="s1">item.IUnknown_QueryInterface(</span><span class="s0">None,</span>
+                                            <span class="s1">pointer(pitem[</span><span class="s5">0</span><span class="s1">]._iid_)</span><span class="s0">,</span>
+                                            <span class="s1">pitem)</span>
+
+    <span class="s0">def </span><span class="s1">_get_Count(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">pcount):</span>
+        <span class="s0">if not </span><span class="s1">pcount:</span>
+            <span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s1">pcount[</span><span class="s5">0</span><span class="s1">] = len(self.collection)</span>
+        <span class="s0">return </span><span class="s1">S_OK</span>
+
+    <span class="s0">def </span><span class="s1">_get__NewEnum(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">penum):</span>
+        <span class="s0">if not </span><span class="s1">penum:</span>
+            <span class="s0">return </span><span class="s1">E_POINTER</span>
+        <span class="s1">enum = VARIANTEnumerator(self.itemtype</span><span class="s0">, </span><span class="s1">self.collection)</span>
+        <span class="s0">return </span><span class="s1">enum.IUnknown_QueryInterface(</span><span class="s0">None,</span>
+                                            <span class="s1">pointer(IUnknown._iid_)</span><span class="s0">,</span>
+                                            <span class="s1">penum)</span>
+</pre>
+</body>
+</html>

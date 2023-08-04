@@ -1,0 +1,48 @@
+<html>
+<head>
+<title>pycaw.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #cc7832;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pycaw.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Python wrapper around the Core Audio Windows API. 
+&quot;&quot;&quot;</span>
+<span class="s2"># import here all newly split up modules,</span>
+<span class="s2"># to keep backwards compatibility</span>
+
+<span class="s2"># flake8: noqa</span>
+<span class="s2"># yes, the imports are unused</span>
+
+<span class="s3">from </span><span class="s1">pycaw.api.audioclient </span><span class="s3">import </span><span class="s1">IAudioClient</span><span class="s3">, </span><span class="s1">ISimpleAudioVolume</span>
+<span class="s3">from </span><span class="s1">pycaw.api.audioclient.depend </span><span class="s3">import </span><span class="s1">WAVEFORMATEX</span>
+<span class="s3">from </span><span class="s1">pycaw.api.audiopolicy </span><span class="s3">import </span><span class="s1">(IAudioSessionControl</span><span class="s3">, </span><span class="s1">IAudioSessionControl2</span><span class="s3">,</span>
+                                   <span class="s1">IAudioSessionEnumerator</span><span class="s3">,</span>
+                                   <span class="s1">IAudioSessionEvents</span><span class="s3">, </span><span class="s1">IAudioSessionManager</span><span class="s3">,</span>
+                                   <span class="s1">IAudioSessionManager2)</span>
+<span class="s3">from </span><span class="s1">pycaw.api.endpointvolume </span><span class="s3">import </span><span class="s1">(IAudioEndpointVolume</span><span class="s3">,</span>
+                                      <span class="s1">IAudioEndpointVolumeCallback</span><span class="s3">,</span>
+                                      <span class="s1">IAudioMeterInformation)</span>
+<span class="s3">from </span><span class="s1">pycaw.api.endpointvolume.depend </span><span class="s3">import </span><span class="s1">(AUDIO_VOLUME_NOTIFICATION_DATA</span><span class="s3">,</span>
+                                             <span class="s1">PAUDIO_VOLUME_NOTIFICATION_DATA)</span>
+<span class="s3">from </span><span class="s1">pycaw.api.mmdeviceapi </span><span class="s3">import </span><span class="s1">(IMMDevice</span><span class="s3">, </span><span class="s1">IMMDeviceCollection</span><span class="s3">,</span>
+                                   <span class="s1">IMMDeviceEnumerator)</span>
+<span class="s3">from </span><span class="s1">pycaw.api.mmdeviceapi.depend </span><span class="s3">import </span><span class="s1">IPropertyStore</span>
+<span class="s3">from </span><span class="s1">pycaw.api.mmdeviceapi.depend.structures </span><span class="s3">import </span><span class="s1">(PROPERTYKEY</span><span class="s3">, </span><span class="s1">PROPVARIANT</span><span class="s3">,</span>
+                                                     <span class="s1">PROPVARIANT_UNION)</span>
+<span class="s3">from </span><span class="s1">pycaw.constants </span><span class="s3">import </span><span class="s1">(AUDCLNT_SHAREMODE</span><span class="s3">, </span><span class="s1">DEVICE_STATE</span><span class="s3">, </span><span class="s1">STGM</span><span class="s3">,</span>
+                             <span class="s1">AudioDeviceState</span><span class="s3">, </span><span class="s1">EDataFlow</span><span class="s3">, </span><span class="s1">ERole)</span>
+<span class="s3">from </span><span class="s1">pycaw.utils </span><span class="s3">import </span><span class="s1">AudioDevice</span><span class="s3">, </span><span class="s1">AudioSession</span><span class="s3">, </span><span class="s1">AudioUtilities</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<html>
+<head>
+<title>clear_comtypes_cache.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+clear_comtypes_cache.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">shutil</span>
+
+<span class="s0">def </span><span class="s1">get_next_cache_dir():</span>
+    <span class="s1">work_dir = os.getcwd()</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s2"># change working directory to avoid import from local folder</span>
+        <span class="s2"># during installation process</span>
+        <span class="s1">os.chdir(os.path.dirname(sys.executable))</span>
+        <span class="s0">import </span><span class="s1">comtypes.client</span>
+        <span class="s0">return </span><span class="s1">comtypes.client._code_cache._find_gen_dir()</span>
+    <span class="s0">except </span><span class="s1">ImportError:</span>
+        <span class="s0">return None</span>
+    <span class="s0">finally</span><span class="s1">:</span>
+        <span class="s1">os.chdir(work_dir)</span>
+
+
+<span class="s0">def </span><span class="s1">_remove(directory):</span>
+    <span class="s1">shutil.rmtree(directory)</span>
+    <span class="s1">print(</span><span class="s3">'Removed directory &quot;%s&quot;' </span><span class="s1">% directory)</span>
+
+
+<span class="s0">def </span><span class="s1">remove_directory(directory</span><span class="s0">, </span><span class="s1">silent):</span>
+    <span class="s0">if </span><span class="s1">directory:</span>
+        <span class="s0">if </span><span class="s1">silent:</span>
+            <span class="s1">_remove(directory)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">confirm = raw_input(</span><span class="s3">'Remove comtypes cache directories? (y/n): '</span><span class="s1">)</span>
+            <span class="s0">except </span><span class="s1">NameError:</span>
+                <span class="s1">confirm = input(</span><span class="s3">'Remove comtypes cache directories? (y/n): '</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">confirm.lower() == </span><span class="s3">'y'</span><span class="s1">:</span>
+                <span class="s1">_remove(directory)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">print(</span><span class="s3">'Directory &quot;%s&quot; NOT removed' </span><span class="s1">% directory)</span>
+                <span class="s0">return False</span>
+    <span class="s0">return True</span>
+
+
+<span class="s0">if </span><span class="s1">len(sys.argv) &gt; </span><span class="s4">1 </span><span class="s0">and </span><span class="s3">&quot;-y&quot; </span><span class="s0">in </span><span class="s1">sys.argv[</span><span class="s4">1</span><span class="s1">:]:</span>
+    <span class="s1">silent = </span><span class="s0">True</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">silent = </span><span class="s0">False</span>
+
+
+<span class="s2"># First iteration may get folder with restricted rights.</span>
+<span class="s2"># Second iteration always gets temp cache folder (writable for all).</span>
+<span class="s1">directory = get_next_cache_dir()</span>
+<span class="s1">removed = remove_directory(directory</span><span class="s0">, </span><span class="s1">silent)</span>
+
+<span class="s0">if </span><span class="s1">removed:</span>
+    <span class="s1">directory = get_next_cache_dir()</span>
+
+    <span class="s2"># do not request the second confirmation</span>
+    <span class="s2"># if the first folder was already removed</span>
+    <span class="s1">remove_directory(directory</span><span class="s0">, </span><span class="s1">silent=removed)</span>
+</pre>
+</body>
+</html>

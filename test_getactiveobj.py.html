@@ -1,0 +1,79 @@
+<html>
+<head>
+<title>test_getactiveobj.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_getactiveobj.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">import </span><span class="s1">comtypes</span>
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+<span class="s0">import </span><span class="s1">comtypes.test</span>
+
+<span class="s1">comtypes.test.requires(</span><span class="s2">&quot;ui&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">setUpModule():</span>
+    <span class="s0">raise </span><span class="s1">unittest.SkipTest(</span><span class="s2">&quot;External test dependencies like this seem bad.  Find a different &quot;</span>
+                            <span class="s2">&quot;built-in win32 API to use.&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s0">if </span><span class="s1">hasattr(self</span><span class="s0">, </span><span class="s2">&quot;w1&quot;</span><span class="s1">):</span>
+            <span class="s1">self.w1.Quit()</span>
+            <span class="s0">del </span><span class="s1">self.w1</span>
+
+
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">comtypes.client.GetActiveObject(</span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+        <span class="s0">except </span><span class="s1">WindowsError:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s3"># seems word is running, we cannot test this.</span>
+            <span class="s1">self.fail(</span><span class="s2">&quot;MSWord is running, cannot test&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># create a WORD instance</span>
+        <span class="s1">self.w1 = w1 = comtypes.client.CreateObject(</span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+        <span class="s3"># connect to the running instance</span>
+        <span class="s1">w2 = comtypes.client.GetActiveObject(</span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+
+        <span class="s3"># check if they are referring to the same object</span>
+        <span class="s1">self.assertEqual(w1.QueryInterface(comtypes.IUnknown)</span><span class="s0">,</span>
+                             <span class="s1">w2.QueryInterface(comtypes.IUnknown))</span>
+
+        <span class="s1">w1.Quit()</span>
+        <span class="s0">del </span><span class="s1">self.w1</span>
+
+        <span class="s0">import </span><span class="s1">time</span>
+        <span class="s1">time.sleep(</span><span class="s4">1</span><span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">w2.Visible</span>
+        <span class="s0">except </span><span class="s1">comtypes.COMError </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s1">variables = err.hresult</span><span class="s0">, </span><span class="s1">err.text</span><span class="s0">, </span><span class="s1">err.details</span>
+            <span class="s1">self.assertEqual(variables</span><span class="s0">, </span><span class="s1">err[:])</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">AssertionError(</span><span class="s2">&quot;COMError not raised&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self.assertRaises(WindowsError</span><span class="s0">, </span><span class="s1">comtypes.client.GetActiveObject</span><span class="s0">, </span><span class="s2">&quot;Word.Application&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

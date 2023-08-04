@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>test_findgendir.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #808080;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_findgendir.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">tempfile</span>
+<span class="s0">import </span><span class="s1">types</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">import </span><span class="s1">comtypes</span>
+<span class="s0">import </span><span class="s1">comtypes.client</span>
+<span class="s0">import </span><span class="s1">comtypes.gen</span>
+
+<span class="s0">if </span><span class="s1">sys.version_info &gt;= (</span><span class="s2">3</span><span class="s0">, </span><span class="s2">4</span><span class="s1">):</span>
+    <span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">reload</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">from </span><span class="s1">imp </span><span class="s0">import </span><span class="s1">reload</span>
+
+<span class="s1">imgbase = os.path.splitext(os.path.basename(sys.executable))[</span><span class="s2">0</span><span class="s1">]</span>
+
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s3">&quot;&quot;&quot;Test the comtypes.client._find_gen_dir() function in several 
+    simulated environments. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">def </span><span class="s1">setUp(self):</span>
+        <span class="s4"># save the original comtypes.gen modules and create a</span>
+        <span class="s4"># substitute with an empty __path__.</span>
+        <span class="s1">self.orig_comtypesgen = sys.modules[</span><span class="s5">&quot;comtypes.gen&quot;</span><span class="s1">]</span>
+        <span class="s0">del </span><span class="s1">sys.modules[</span><span class="s5">&quot;comtypes.gen&quot;</span><span class="s1">]</span>
+        <span class="s0">del </span><span class="s1">comtypes.gen</span>
+        <span class="s1">mod = sys.modules[</span><span class="s5">&quot;comtypes.gen&quot;</span><span class="s1">] = types.ModuleType(</span><span class="s5">&quot;comtypes.gen&quot;</span><span class="s1">)</span>
+        <span class="s1">mod.__path__ = []</span>
+        <span class="s1">comtypes.gen = mod</span>
+
+    <span class="s0">def </span><span class="s1">tearDown(self):</span>
+        <span class="s4"># Delete py2exe-attributes that we have attached to the sys module</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s5">&quot;frozen frozendllhandle&quot;</span><span class="s1">.split():</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">delattr(sys</span><span class="s0">, </span><span class="s1">name)</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s0">pass</span>
+        <span class="s4"># restore the original comtypes.gen module</span>
+        <span class="s1">comtypes.gen = self.orig_comtypesgen</span>
+        <span class="s1">sys.modules[</span><span class="s5">&quot;comtypes.gen&quot;</span><span class="s1">] = self.orig_comtypesgen</span>
+        <span class="s1">reload(comtypes.gen)</span>
+
+    <span class="s0">def </span><span class="s1">test_script(self):</span>
+        <span class="s4"># %APPDATA%\Python\Python25\comtypes_cache</span>
+        <span class="s1">template = </span><span class="s5">r&quot;$APPDATA\Python\Python%d%d\comtypes_cache&quot;</span>
+        <span class="s1">path = os.path.expandvars(template % sys.version_info[:</span><span class="s2">2</span><span class="s1">])</span>
+        <span class="s1">gen_dir = comtypes.client._find_gen_dir()</span>
+        <span class="s1">self.assertEqual(path</span><span class="s0">, </span><span class="s1">gen_dir)</span>
+
+    <span class="s0">def </span><span class="s1">test_frozen_dll(self):</span>
+        <span class="s1">sys.frozen = </span><span class="s5">&quot;dll&quot;</span>
+        <span class="s1">sys.frozendllhandle = sys.dllhandle</span>
+        <span class="s1">ma</span><span class="s0">, </span><span class="s1">mi = sys.version_info[:</span><span class="s2">2</span><span class="s1">]</span>
+        <span class="s4"># %TEMP%\comtypes_cache\&lt;imagebasename&gt;-25</span>
+        <span class="s4"># the image is python25.dll</span>
+        <span class="s1">path = os.path.join(tempfile.gettempdir()</span><span class="s0">,</span>
+                            <span class="s5">r&quot;comtypes_cache\%s%d%d-%d%d&quot; </span><span class="s1">% (imgbase</span><span class="s0">, </span><span class="s1">ma</span><span class="s0">, </span><span class="s1">mi</span><span class="s0">, </span><span class="s1">ma</span><span class="s0">, </span><span class="s1">mi))</span>
+        <span class="s1">gen_dir = comtypes.client._find_gen_dir()</span>
+        <span class="s1">self.assertEqual(path</span><span class="s0">, </span><span class="s1">gen_dir)</span>
+
+    <span class="s0">def </span><span class="s1">test_frozen_console_exe(self):</span>
+        <span class="s1">sys.frozen = </span><span class="s5">&quot;console_exe&quot;</span>
+        <span class="s4"># %TEMP%\comtypes_cache\&lt;imagebasename&gt;-25</span>
+        <span class="s1">path = os.path.join(tempfile.gettempdir()</span><span class="s0">,</span>
+                            <span class="s5">r&quot;comtypes_cache\%s-%d%d&quot; </span><span class="s1">% (</span>
+            <span class="s1">imgbase</span><span class="s0">, </span><span class="s1">sys.version_info[</span><span class="s2">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">sys.version_info[</span><span class="s2">1</span><span class="s1">]))</span>
+        <span class="s1">gen_dir = comtypes.client._find_gen_dir()</span>
+        <span class="s1">self.assertEqual(path</span><span class="s0">, </span><span class="s1">gen_dir)</span>
+
+    <span class="s0">def </span><span class="s1">test_frozen_windows_exe(self):</span>
+        <span class="s1">sys.frozen = </span><span class="s5">&quot;windows_exe&quot;</span>
+        <span class="s4"># %TEMP%\comtypes_cache\&lt;imagebasename&gt;-25</span>
+        <span class="s1">path = os.path.join(tempfile.gettempdir()</span><span class="s0">,</span>
+                            <span class="s5">r&quot;comtypes_cache\%s-%d%d&quot; </span><span class="s1">% (</span>
+            <span class="s1">imgbase</span><span class="s0">, </span><span class="s1">sys.version_info[</span><span class="s2">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">sys.version_info[</span><span class="s2">1</span><span class="s1">]))</span>
+        <span class="s1">gen_dir = comtypes.client._find_gen_dir()</span>
+        <span class="s1">self.assertEqual(path</span><span class="s0">, </span><span class="s1">gen_dir)</span>
+
+
+<span class="s0">def </span><span class="s1">main():</span>
+    <span class="s1">unittest.main()</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s5">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">main()</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<html>
+<head>
+<title>test_unicode.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_unicode.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+<span class="s0"># -*- coding: utf-8 -*-</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot; 
+Notes about unicode handling in psutil 
+====================================== 
+ 
+Starting from version 5.3.0 psutil adds unicode support, see: 
+https://github.com/giampaolo/psutil/issues/1040 
+The notes below apply to *any* API returning a string such as 
+process exe(), cwd() or username(): 
+ 
+* all strings are encoded by using the OS filesystem encoding 
+  (sys.getfilesystemencoding()) which varies depending on the platform 
+  (e.g. &quot;UTF-8&quot; on macOS, &quot;mbcs&quot; on Win) 
+* no API call is supposed to crash with UnicodeDecodeError 
+* instead, in case of badly encoded data returned by the OS, the 
+  following error handlers are used to replace the corrupted characters in 
+  the string: 
+    * Python 3: sys.getfilesystemencodeerrors() (PY 3.6+) or 
+      &quot;surrogatescape&quot; on POSIX and &quot;replace&quot; on Windows 
+    * Python 2: &quot;replace&quot; 
+* on Python 2 all APIs return bytes (str type), never unicode 
+* on Python 2, you can go back to unicode by doing: 
+ 
+    &gt;&gt;&gt; unicode(p.exe(), sys.getdefaultencoding(), errors=&quot;replace&quot;) 
+ 
+For a detailed explanation of how psutil handles unicode see #1040. 
+ 
+Tests 
+===== 
+ 
+List of APIs returning or dealing with a string: 
+('not tested' means they are not tested to deal with non-ASCII strings): 
+ 
+* Process.cmdline() 
+* Process.connections('unix') 
+* Process.cwd() 
+* Process.environ() 
+* Process.exe() 
+* Process.memory_maps() 
+* Process.name() 
+* Process.open_files() 
+* Process.username()             (not tested) 
+ 
+* disk_io_counters()             (not tested) 
+* disk_partitions()              (not tested) 
+* disk_usage(str) 
+* net_connections('unix') 
+* net_if_addrs()                 (not tested) 
+* net_if_stats()                 (not tested) 
+* net_io_counters()              (not tested) 
+* sensors_fans()                 (not tested) 
+* sensors_temperatures()         (not tested) 
+* users()                        (not tested) 
+ 
+* WindowsService.binpath()       (not tested) 
+* WindowsService.description()   (not tested) 
+* WindowsService.display_name()  (not tested) 
+* WindowsService.name()          (not tested) 
+* WindowsService.status()        (not tested) 
+* WindowsService.username()      (not tested) 
+ 
+In here we create a unicode path with a funky non-ASCII name and (where 
+possible) make psutil return it back (e.g. on name(), exe(), open_files(), 
+etc.) and make sure that: 
+ 
+* psutil never crashes with UnicodeDecodeError 
+* the returned path matches 
+&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">shutil</span>
+<span class="s3">import </span><span class="s1">traceback</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+<span class="s3">import </span><span class="s1">warnings</span>
+<span class="s3">from </span><span class="s1">contextlib </span><span class="s3">import </span><span class="s1">closing</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">BSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">OPENBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">POSIX</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">WINDOWS</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">PY3</span>
+<span class="s3">from </span><span class="s1">psutil._compat </span><span class="s3">import </span><span class="s1">u</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">APPVEYOR</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">ASCII_FS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">CI_TESTING</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_CONNECTIONS_UNIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_ENVIRON</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_MEMORY_MAPS</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">INVALID_UNICODE_SUFFIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PYPY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TESTFN_PREFIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">UNICODE_SUFFIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">bind_unix_socket</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">chdir</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">copyload_shared_lib</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">create_exe</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">get_testfn</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_mkdir</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_rmpath</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">serialrun</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">skip_on_access_denied</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">spawn_testproc</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">terminate</span>
+
+
+<span class="s3">if </span><span class="s1">APPVEYOR:</span>
+    <span class="s3">def </span><span class="s1">safe_rmpath(path):  </span><span class="s0"># NOQA</span>
+        <span class="s0"># TODO - this is quite random and I'm not sure why it happens,</span>
+        <span class="s0"># nor I can reproduce it locally:</span>
+        <span class="s0"># https://ci.appveyor.com/project/giampaolo/psutil/build/job/</span>
+        <span class="s0">#     jiq2cgd6stsbtn60</span>
+        <span class="s0"># safe_rmpath() happens after reap_children() so this is weird</span>
+        <span class="s0"># Perhaps wait_procs() on Windows is broken? Maybe because</span>
+        <span class="s0"># of STILL_ACTIVE?</span>
+        <span class="s0"># https://github.com/giampaolo/psutil/blob/</span>
+        <span class="s0">#     68c7a70728a31d8b8b58f4be6c4c0baa2f449eda/psutil/arch/</span>
+        <span class="s0">#     windows/process_info.c#L146</span>
+        <span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_rmpath </span><span class="s3">as </span><span class="s1">rm</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">rm(path)</span>
+        <span class="s3">except </span><span class="s1">WindowsError:</span>
+            <span class="s1">traceback.print_exc()</span>
+
+
+<span class="s3">def </span><span class="s1">try_unicode(suffix):</span>
+    <span class="s2">&quot;&quot;&quot;Return True if both the fs and the subprocess module can 
+    deal with a unicode file name. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">sproc = </span><span class="s3">None</span>
+    <span class="s1">testfn = get_testfn(suffix=suffix)</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">safe_rmpath(testfn)</span>
+        <span class="s1">create_exe(testfn)</span>
+        <span class="s1">sproc = spawn_testproc(cmd=[testfn])</span>
+        <span class="s1">shutil.copyfile(testfn</span><span class="s3">, </span><span class="s1">testfn + </span><span class="s4">'-2'</span><span class="s1">)</span>
+        <span class="s1">safe_rmpath(testfn + </span><span class="s4">'-2'</span><span class="s1">)</span>
+    <span class="s3">except </span><span class="s1">(UnicodeEncodeError</span><span class="s3">, </span><span class="s1">IOError):</span>
+        <span class="s3">return False</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">return True</span>
+    <span class="s3">finally</span><span class="s1">:</span>
+        <span class="s3">if </span><span class="s1">sproc </span><span class="s3">is not None</span><span class="s1">:</span>
+            <span class="s1">terminate(sproc)</span>
+        <span class="s1">safe_rmpath(testfn)</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># FS APIs</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">BaseUnicodeTest(PsutilTestCase):</span>
+    <span class="s1">funky_suffix = </span><span class="s3">None</span>
+
+    <span class="s3">def </span><span class="s1">setUp(self):</span>
+        <span class="s3">if </span><span class="s1">self.funky_suffix </span><span class="s3">is not None</span><span class="s1">:</span>
+            <span class="s3">if not </span><span class="s1">try_unicode(self.funky_suffix):</span>
+                <span class="s3">raise </span><span class="s1">self.skipTest(</span><span class="s4">&quot;can't handle unicode str&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">@serialrun</span>
+<span class="s1">@unittest.skipIf(ASCII_FS</span><span class="s3">, </span><span class="s4">&quot;ASCII fs&quot;</span><span class="s1">)</span>
+<span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and not </span><span class="s1">PY3</span><span class="s3">, </span><span class="s4">&quot;too much trouble on PYPY2&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestFSAPIs(BaseUnicodeTest):</span>
+    <span class="s2">&quot;&quot;&quot;Test FS APIs with a funky, valid, UTF8 path name.&quot;&quot;&quot;</span>
+
+    <span class="s1">funky_suffix = UNICODE_SUFFIX</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">setUpClass(cls):</span>
+        <span class="s1">cls.funky_name = get_testfn(suffix=cls.funky_suffix)</span>
+        <span class="s1">create_exe(cls.funky_name)</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">tearDownClass(cls):</span>
+        <span class="s1">safe_rmpath(cls.funky_name)</span>
+
+    <span class="s3">def </span><span class="s1">expect_exact_path_match(self):</span>
+        <span class="s0"># Do not expect psutil to correctly handle unicode paths on</span>
+        <span class="s0"># Python 2 if os.listdir() is not able either.</span>
+        <span class="s1">here = </span><span class="s4">'.' </span><span class="s3">if </span><span class="s1">isinstance(self.funky_name</span><span class="s3">, </span><span class="s1">str) </span><span class="s3">else </span><span class="s1">u(</span><span class="s4">'.'</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">warnings.catch_warnings():</span>
+            <span class="s1">warnings.simplefilter(</span><span class="s4">&quot;ignore&quot;</span><span class="s1">)</span>
+            <span class="s3">return </span><span class="s1">self.funky_name </span><span class="s3">in </span><span class="s1">os.listdir(here)</span>
+
+    <span class="s0"># ---</span>
+
+    <span class="s3">def </span><span class="s1">test_proc_exe(self):</span>
+        <span class="s1">subp = self.spawn_testproc(cmd=[self.funky_name])</span>
+        <span class="s1">p = psutil.Process(subp.pid)</span>
+        <span class="s1">exe = p.exe()</span>
+        <span class="s1">self.assertIsInstance(exe</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s3">if </span><span class="s1">self.expect_exact_path_match():</span>
+            <span class="s1">self.assertEqual(os.path.normcase(exe)</span><span class="s3">,</span>
+                             <span class="s1">os.path.normcase(self.funky_name))</span>
+
+    <span class="s3">def </span><span class="s1">test_proc_name(self):</span>
+        <span class="s1">subp = self.spawn_testproc(cmd=[self.funky_name])</span>
+        <span class="s1">name = psutil.Process(subp.pid).name()</span>
+        <span class="s1">self.assertIsInstance(name</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s3">if </span><span class="s1">self.expect_exact_path_match():</span>
+            <span class="s1">self.assertEqual(name</span><span class="s3">, </span><span class="s1">os.path.basename(self.funky_name))</span>
+
+    <span class="s3">def </span><span class="s1">test_proc_cmdline(self):</span>
+        <span class="s1">subp = self.spawn_testproc(cmd=[self.funky_name])</span>
+        <span class="s1">p = psutil.Process(subp.pid)</span>
+        <span class="s1">cmdline = p.cmdline()</span>
+        <span class="s3">for </span><span class="s1">part </span><span class="s3">in </span><span class="s1">cmdline:</span>
+            <span class="s1">self.assertIsInstance(part</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s3">if </span><span class="s1">self.expect_exact_path_match():</span>
+            <span class="s1">self.assertEqual(cmdline</span><span class="s3">, </span><span class="s1">[self.funky_name])</span>
+
+    <span class="s3">def </span><span class="s1">test_proc_cwd(self):</span>
+        <span class="s1">dname = self.funky_name + </span><span class="s4">&quot;2&quot;</span>
+        <span class="s1">self.addCleanup(safe_rmpath</span><span class="s3">, </span><span class="s1">dname)</span>
+        <span class="s1">safe_mkdir(dname)</span>
+        <span class="s3">with </span><span class="s1">chdir(dname):</span>
+            <span class="s1">p = psutil.Process()</span>
+            <span class="s1">cwd = p.cwd()</span>
+        <span class="s1">self.assertIsInstance(p.cwd()</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s3">if </span><span class="s1">self.expect_exact_path_match():</span>
+            <span class="s1">self.assertEqual(cwd</span><span class="s3">, </span><span class="s1">dname)</span>
+
+    <span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;fails on PYPY + WINDOWS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_proc_open_files(self):</span>
+        <span class="s1">p = psutil.Process()</span>
+        <span class="s1">start = set(p.open_files())</span>
+        <span class="s3">with </span><span class="s1">open(self.funky_name</span><span class="s3">, </span><span class="s4">'rb'</span><span class="s1">):</span>
+            <span class="s1">new = set(p.open_files())</span>
+        <span class="s1">path = (new - start).pop().path</span>
+        <span class="s1">self.assertIsInstance(path</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s3">if </span><span class="s1">BSD </span><span class="s3">and not </span><span class="s1">path:</span>
+            <span class="s0"># XXX - see https://github.com/giampaolo/psutil/issues/595</span>
+            <span class="s3">return </span><span class="s1">self.skipTest(</span><span class="s4">&quot;open_files on BSD is broken&quot;</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">self.expect_exact_path_match():</span>
+            <span class="s1">self.assertEqual(os.path.normcase(path)</span><span class="s3">,</span>
+                             <span class="s1">os.path.normcase(self.funky_name))</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">&quot;POSIX only&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_proc_connections(self):</span>
+        <span class="s1">name = self.get_testfn(suffix=self.funky_suffix)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">sock = bind_unix_socket(name)</span>
+        <span class="s3">except </span><span class="s1">UnicodeEncodeError:</span>
+            <span class="s3">if </span><span class="s1">PY3:</span>
+                <span class="s3">raise</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(sock):</span>
+            <span class="s1">conn = psutil.Process().connections(</span><span class="s4">'unix'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+            <span class="s1">self.assertIsInstance(conn.laddr</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s0"># AF_UNIX addr not set on OpenBSD</span>
+            <span class="s3">if not </span><span class="s1">OPENBSD:  </span><span class="s0"># XXX</span>
+                <span class="s1">self.assertEqual(conn.laddr</span><span class="s3">, </span><span class="s1">name)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">&quot;POSIX only&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_CONNECTIONS_UNIX</span><span class="s3">, </span><span class="s4">&quot;can't list UNIX sockets&quot;</span><span class="s1">)</span>
+    <span class="s1">@skip_on_access_denied()</span>
+    <span class="s3">def </span><span class="s1">test_net_connections(self):</span>
+        <span class="s3">def </span><span class="s1">find_sock(cons):</span>
+            <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                <span class="s3">if </span><span class="s1">os.path.basename(conn.laddr).startswith(TESTFN_PREFIX):</span>
+                    <span class="s3">return </span><span class="s1">conn</span>
+            <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;connection not found&quot;</span><span class="s1">)</span>
+
+        <span class="s1">name = self.get_testfn(suffix=self.funky_suffix)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">sock = bind_unix_socket(name)</span>
+        <span class="s3">except </span><span class="s1">UnicodeEncodeError:</span>
+            <span class="s3">if </span><span class="s1">PY3:</span>
+                <span class="s3">raise</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise </span><span class="s1">unittest.SkipTest(</span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+        <span class="s3">with </span><span class="s1">closing(sock):</span>
+            <span class="s1">cons = psutil.net_connections(kind=</span><span class="s4">'unix'</span><span class="s1">)</span>
+            <span class="s0"># AF_UNIX addr not set on OpenBSD</span>
+            <span class="s3">if not </span><span class="s1">OPENBSD:</span>
+                <span class="s1">conn = find_sock(cons)</span>
+                <span class="s1">self.assertIsInstance(conn.laddr</span><span class="s3">, </span><span class="s1">str)</span>
+                <span class="s1">self.assertEqual(conn.laddr</span><span class="s3">, </span><span class="s1">name)</span>
+
+    <span class="s3">def </span><span class="s1">test_disk_usage(self):</span>
+        <span class="s1">dname = self.funky_name + </span><span class="s4">&quot;2&quot;</span>
+        <span class="s1">self.addCleanup(safe_rmpath</span><span class="s3">, </span><span class="s1">dname)</span>
+        <span class="s1">safe_mkdir(dname)</span>
+        <span class="s1">psutil.disk_usage(dname)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_MEMORY_MAPS</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">PY3</span><span class="s3">, </span><span class="s4">&quot;ctypes does not support unicode on PY2&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(PYPY</span><span class="s3">, </span><span class="s4">&quot;unstable on PYPY&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_memory_maps(self):</span>
+        <span class="s0"># XXX: on Python 2, using ctypes.CDLL with a unicode path</span>
+        <span class="s0"># opens a message box which blocks the test run.</span>
+        <span class="s3">with </span><span class="s1">copyload_shared_lib(suffix=self.funky_suffix) </span><span class="s3">as </span><span class="s1">funky_path:</span>
+            <span class="s3">def </span><span class="s1">normpath(p):</span>
+                <span class="s3">return </span><span class="s1">os.path.realpath(os.path.normcase(p))</span>
+            <span class="s1">libpaths = [normpath(x.path)</span>
+                        <span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">psutil.Process().memory_maps()]</span>
+            <span class="s0"># ...just to have a clearer msg in case of failure</span>
+            <span class="s1">libpaths = [x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">libpaths </span><span class="s3">if </span><span class="s1">TESTFN_PREFIX </span><span class="s3">in </span><span class="s1">x]</span>
+            <span class="s1">self.assertIn(normpath(funky_path)</span><span class="s3">, </span><span class="s1">libpaths)</span>
+            <span class="s3">for </span><span class="s1">path </span><span class="s3">in </span><span class="s1">libpaths:</span>
+                <span class="s1">self.assertIsInstance(path</span><span class="s3">, </span><span class="s1">str)</span>
+
+
+<span class="s1">@unittest.skipIf(CI_TESTING</span><span class="s3">, </span><span class="s4">&quot;unreliable on CI&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestFSAPIsWithInvalidPath(TestFSAPIs):</span>
+    <span class="s2">&quot;&quot;&quot;Test FS APIs with a funky, invalid path name.&quot;&quot;&quot;</span>
+    <span class="s1">funky_suffix = INVALID_UNICODE_SUFFIX</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">expect_exact_path_match(cls):</span>
+        <span class="s0"># Invalid unicode names are supposed to work on Python 2.</span>
+        <span class="s3">return True</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># Non fs APIs</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestNonFSAPIS(BaseUnicodeTest):</span>
+    <span class="s2">&quot;&quot;&quot;Unicode tests for non fs-related APIs.&quot;&quot;&quot;</span>
+    <span class="s1">funky_suffix = UNICODE_SUFFIX </span><span class="s3">if </span><span class="s1">PY3 </span><span class="s3">else </span><span class="s4">'è'</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_ENVIRON</span><span class="s3">, </span><span class="s4">&quot;not supported&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(PYPY </span><span class="s3">and </span><span class="s1">WINDOWS</span><span class="s3">, </span><span class="s4">&quot;segfaults on PYPY + WINDOWS&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_proc_environ(self):</span>
+        <span class="s0"># Note: differently from others, this test does not deal</span>
+        <span class="s0"># with fs paths. On Python 2 subprocess module is broken as</span>
+        <span class="s0"># it's not able to handle with non-ASCII env vars, so</span>
+        <span class="s0"># we use &quot;è&quot;, which is part of the extended ASCII table</span>
+        <span class="s0"># (unicode point &lt;= 255).</span>
+        <span class="s1">env = os.environ.copy()</span>
+        <span class="s1">env[</span><span class="s4">'FUNNY_ARG'</span><span class="s1">] = self.funky_suffix</span>
+        <span class="s1">sproc = self.spawn_testproc(env=env)</span>
+        <span class="s1">p = psutil.Process(sproc.pid)</span>
+        <span class="s1">env = p.environ()</span>
+        <span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">env.items():</span>
+            <span class="s1">self.assertIsInstance(k</span><span class="s3">, </span><span class="s1">str)</span>
+            <span class="s1">self.assertIsInstance(v</span><span class="s3">, </span><span class="s1">str)</span>
+        <span class="s1">self.assertEqual(env[</span><span class="s4">'FUNNY_ARG'</span><span class="s1">]</span><span class="s3">, </span><span class="s1">self.funky_suffix)</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s4">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,950 @@
+<html>
+<head>
+<title>_psbsd.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+.s6 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_psbsd.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;FreeBSD, OpenBSD and NetBSD platforms implementation.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">contextlib</span>
+<span class="s3">import </span><span class="s1">errno</span>
+<span class="s3">import </span><span class="s1">functools</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">xml.etree.ElementTree </span><span class="s3">as </span><span class="s1">ET</span>
+<span class="s3">from </span><span class="s1">collections </span><span class="s3">import </span><span class="s1">defaultdict</span>
+<span class="s3">from </span><span class="s1">collections </span><span class="s3">import </span><span class="s1">namedtuple</span>
+
+<span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">_common</span>
+<span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">_psposix</span>
+<span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">_psutil_bsd </span><span class="s3">as </span><span class="s1">cext</span>
+<span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">_psutil_posix </span><span class="s3">as </span><span class="s1">cext_posix</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">FREEBSD</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">NETBSD</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">OPENBSD</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">AccessDenied</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">NoSuchProcess</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">ZombieProcess</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">conn_tmap</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">conn_to_ntuple</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">memoize</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">memoize_when_activated</span>
+<span class="s3">from </span><span class="s1">._common </span><span class="s3">import </span><span class="s1">usage_percent</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">FileNotFoundError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">PermissionError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">ProcessLookupError</span>
+<span class="s3">from </span><span class="s1">._compat </span><span class="s3">import </span><span class="s1">which</span>
+
+
+<span class="s1">__extra__all__ = []</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- globals</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">if </span><span class="s1">FREEBSD:</span>
+    <span class="s1">PROC_STATUSES = {</span>
+        <span class="s1">cext.SIDL: _common.STATUS_IDLE</span><span class="s3">,</span>
+        <span class="s1">cext.SRUN: _common.STATUS_RUNNING</span><span class="s3">,</span>
+        <span class="s1">cext.SSLEEP: _common.STATUS_SLEEPING</span><span class="s3">,</span>
+        <span class="s1">cext.SSTOP: _common.STATUS_STOPPED</span><span class="s3">,</span>
+        <span class="s1">cext.SZOMB: _common.STATUS_ZOMBIE</span><span class="s3">,</span>
+        <span class="s1">cext.SWAIT: _common.STATUS_WAITING</span><span class="s3">,</span>
+        <span class="s1">cext.SLOCK: _common.STATUS_LOCKED</span><span class="s3">,</span>
+    <span class="s1">}</span>
+<span class="s3">elif </span><span class="s1">OPENBSD:</span>
+    <span class="s1">PROC_STATUSES = {</span>
+        <span class="s1">cext.SIDL: _common.STATUS_IDLE</span><span class="s3">,</span>
+        <span class="s1">cext.SSLEEP: _common.STATUS_SLEEPING</span><span class="s3">,</span>
+        <span class="s1">cext.SSTOP: _common.STATUS_STOPPED</span><span class="s3">,</span>
+        <span class="s0"># According to /usr/include/sys/proc.h SZOMB is unused.</span>
+        <span class="s0"># test_zombie_process() shows that SDEAD is the right</span>
+        <span class="s0"># equivalent. Also it appears there's no equivalent of</span>
+        <span class="s0"># psutil.STATUS_DEAD. SDEAD really means STATUS_ZOMBIE.</span>
+        <span class="s0"># cext.SZOMB: _common.STATUS_ZOMBIE,</span>
+        <span class="s1">cext.SDEAD: _common.STATUS_ZOMBIE</span><span class="s3">,</span>
+        <span class="s1">cext.SZOMB: _common.STATUS_ZOMBIE</span><span class="s3">,</span>
+        <span class="s0"># From http://www.eecs.harvard.edu/~margo/cs161/videos/proc.h.txt</span>
+        <span class="s0"># OpenBSD has SRUN and SONPROC: SRUN indicates that a process</span>
+        <span class="s0"># is runnable but *not* yet running, i.e. is on a run queue.</span>
+        <span class="s0"># SONPROC indicates that the process is actually executing on</span>
+        <span class="s0"># a CPU, i.e. it is no longer on a run queue.</span>
+        <span class="s0"># As such we'll map SRUN to STATUS_WAKING and SONPROC to</span>
+        <span class="s0"># STATUS_RUNNING</span>
+        <span class="s1">cext.SRUN: _common.STATUS_WAKING</span><span class="s3">,</span>
+        <span class="s1">cext.SONPROC: _common.STATUS_RUNNING</span><span class="s3">,</span>
+    <span class="s1">}</span>
+<span class="s3">elif </span><span class="s1">NETBSD:</span>
+    <span class="s1">PROC_STATUSES = {</span>
+        <span class="s1">cext.SIDL: _common.STATUS_IDLE</span><span class="s3">,</span>
+        <span class="s1">cext.SSLEEP: _common.STATUS_SLEEPING</span><span class="s3">,</span>
+        <span class="s1">cext.SSTOP: _common.STATUS_STOPPED</span><span class="s3">,</span>
+        <span class="s1">cext.SZOMB: _common.STATUS_ZOMBIE</span><span class="s3">,</span>
+        <span class="s1">cext.SRUN: _common.STATUS_WAKING</span><span class="s3">,</span>
+        <span class="s1">cext.SONPROC: _common.STATUS_RUNNING</span><span class="s3">,</span>
+    <span class="s1">}</span>
+
+<span class="s1">TCP_STATUSES = {</span>
+    <span class="s1">cext.TCPS_ESTABLISHED: _common.CONN_ESTABLISHED</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_SYN_SENT: _common.CONN_SYN_SENT</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_SYN_RECEIVED: _common.CONN_SYN_RECV</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_FIN_WAIT_1: _common.CONN_FIN_WAIT1</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_FIN_WAIT_2: _common.CONN_FIN_WAIT2</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_TIME_WAIT: _common.CONN_TIME_WAIT</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_CLOSED: _common.CONN_CLOSE</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_CLOSE_WAIT: _common.CONN_CLOSE_WAIT</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_LAST_ACK: _common.CONN_LAST_ACK</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_LISTEN: _common.CONN_LISTEN</span><span class="s3">,</span>
+    <span class="s1">cext.TCPS_CLOSING: _common.CONN_CLOSING</span><span class="s3">,</span>
+    <span class="s1">cext.PSUTIL_CONN_NONE: _common.CONN_NONE</span><span class="s3">,</span>
+<span class="s1">}</span>
+
+<span class="s1">PAGESIZE = cext_posix.getpagesize()</span>
+<span class="s1">AF_LINK = cext_posix.AF_LINK</span>
+
+<span class="s1">HAS_PER_CPU_TIMES = hasattr(cext</span><span class="s3">, </span><span class="s4">&quot;per_cpu_times&quot;</span><span class="s1">)</span>
+<span class="s1">HAS_PROC_NUM_THREADS = hasattr(cext</span><span class="s3">, </span><span class="s4">&quot;proc_num_threads&quot;</span><span class="s1">)</span>
+<span class="s1">HAS_PROC_OPEN_FILES = hasattr(cext</span><span class="s3">, </span><span class="s4">'proc_open_files'</span><span class="s1">)</span>
+<span class="s1">HAS_PROC_NUM_FDS = hasattr(cext</span><span class="s3">, </span><span class="s4">'proc_num_fds'</span><span class="s1">)</span>
+
+<span class="s1">kinfo_proc_map = dict(</span>
+    <span class="s1">ppid=</span><span class="s5">0</span><span class="s3">,</span>
+    <span class="s1">status=</span><span class="s5">1</span><span class="s3">,</span>
+    <span class="s1">real_uid=</span><span class="s5">2</span><span class="s3">,</span>
+    <span class="s1">effective_uid=</span><span class="s5">3</span><span class="s3">,</span>
+    <span class="s1">saved_uid=</span><span class="s5">4</span><span class="s3">,</span>
+    <span class="s1">real_gid=</span><span class="s5">5</span><span class="s3">,</span>
+    <span class="s1">effective_gid=</span><span class="s5">6</span><span class="s3">,</span>
+    <span class="s1">saved_gid=</span><span class="s5">7</span><span class="s3">,</span>
+    <span class="s1">ttynr=</span><span class="s5">8</span><span class="s3">,</span>
+    <span class="s1">create_time=</span><span class="s5">9</span><span class="s3">,</span>
+    <span class="s1">ctx_switches_vol=</span><span class="s5">10</span><span class="s3">,</span>
+    <span class="s1">ctx_switches_unvol=</span><span class="s5">11</span><span class="s3">,</span>
+    <span class="s1">read_io_count=</span><span class="s5">12</span><span class="s3">,</span>
+    <span class="s1">write_io_count=</span><span class="s5">13</span><span class="s3">,</span>
+    <span class="s1">user_time=</span><span class="s5">14</span><span class="s3">,</span>
+    <span class="s1">sys_time=</span><span class="s5">15</span><span class="s3">,</span>
+    <span class="s1">ch_user_time=</span><span class="s5">16</span><span class="s3">,</span>
+    <span class="s1">ch_sys_time=</span><span class="s5">17</span><span class="s3">,</span>
+    <span class="s1">rss=</span><span class="s5">18</span><span class="s3">,</span>
+    <span class="s1">vms=</span><span class="s5">19</span><span class="s3">,</span>
+    <span class="s1">memtext=</span><span class="s5">20</span><span class="s3">,</span>
+    <span class="s1">memdata=</span><span class="s5">21</span><span class="s3">,</span>
+    <span class="s1">memstack=</span><span class="s5">22</span><span class="s3">,</span>
+    <span class="s1">cpunum=</span><span class="s5">23</span><span class="s3">,</span>
+    <span class="s1">name=</span><span class="s5">24</span><span class="s3">,</span>
+<span class="s1">)</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- named tuples</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s0"># psutil.virtual_memory()</span>
+<span class="s1">svmem = namedtuple(</span>
+    <span class="s4">'svmem'</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'total'</span><span class="s3">, </span><span class="s4">'available'</span><span class="s3">, </span><span class="s4">'percent'</span><span class="s3">, </span><span class="s4">'used'</span><span class="s3">, </span><span class="s4">'free'</span><span class="s3">,</span>
+              <span class="s4">'active'</span><span class="s3">, </span><span class="s4">'inactive'</span><span class="s3">, </span><span class="s4">'buffers'</span><span class="s3">, </span><span class="s4">'cached'</span><span class="s3">, </span><span class="s4">'shared'</span><span class="s3">, </span><span class="s4">'wired'</span><span class="s1">])</span>
+<span class="s0"># psutil.cpu_times()</span>
+<span class="s1">scputimes = namedtuple(</span>
+    <span class="s4">'scputimes'</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'user'</span><span class="s3">, </span><span class="s4">'nice'</span><span class="s3">, </span><span class="s4">'system'</span><span class="s3">, </span><span class="s4">'idle'</span><span class="s3">, </span><span class="s4">'irq'</span><span class="s1">])</span>
+<span class="s0"># psutil.Process.memory_info()</span>
+<span class="s1">pmem = namedtuple(</span><span class="s4">'pmem'</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'rss'</span><span class="s3">, </span><span class="s4">'vms'</span><span class="s3">, </span><span class="s4">'text'</span><span class="s3">, </span><span class="s4">'data'</span><span class="s3">, </span><span class="s4">'stack'</span><span class="s1">])</span>
+<span class="s0"># psutil.Process.memory_full_info()</span>
+<span class="s1">pfullmem = pmem</span>
+<span class="s0"># psutil.Process.cpu_times()</span>
+<span class="s1">pcputimes = namedtuple(</span><span class="s4">'pcputimes'</span><span class="s3">,</span>
+                       <span class="s1">[</span><span class="s4">'user'</span><span class="s3">, </span><span class="s4">'system'</span><span class="s3">, </span><span class="s4">'children_user'</span><span class="s3">, </span><span class="s4">'children_system'</span><span class="s1">])</span>
+<span class="s0"># psutil.Process.memory_maps(grouped=True)</span>
+<span class="s1">pmmap_grouped = namedtuple(</span>
+    <span class="s4">'pmmap_grouped'</span><span class="s3">, </span><span class="s4">'path rss, private, ref_count, shadow_count'</span><span class="s1">)</span>
+<span class="s0"># psutil.Process.memory_maps(grouped=False)</span>
+<span class="s1">pmmap_ext = namedtuple(</span>
+    <span class="s4">'pmmap_ext'</span><span class="s3">, </span><span class="s4">'addr, perms path rss, private, ref_count, shadow_count'</span><span class="s1">)</span>
+<span class="s0"># psutil.disk_io_counters()</span>
+<span class="s3">if </span><span class="s1">FREEBSD:</span>
+    <span class="s1">sdiskio = namedtuple(</span><span class="s4">'sdiskio'</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'read_count'</span><span class="s3">, </span><span class="s4">'write_count'</span><span class="s3">,</span>
+                                     <span class="s4">'read_bytes'</span><span class="s3">, </span><span class="s4">'write_bytes'</span><span class="s3">,</span>
+                                     <span class="s4">'read_time'</span><span class="s3">, </span><span class="s4">'write_time'</span><span class="s3">,</span>
+                                     <span class="s4">'busy_time'</span><span class="s1">])</span>
+<span class="s3">else</span><span class="s1">:</span>
+    <span class="s1">sdiskio = namedtuple(</span><span class="s4">'sdiskio'</span><span class="s3">, </span><span class="s1">[</span><span class="s4">'read_count'</span><span class="s3">, </span><span class="s4">'write_count'</span><span class="s3">,</span>
+                                     <span class="s4">'read_bytes'</span><span class="s3">, </span><span class="s4">'write_bytes'</span><span class="s1">])</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- memory</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">def </span><span class="s1">virtual_memory():</span>
+    <span class="s2">&quot;&quot;&quot;System virtual memory as a namedtuple.&quot;&quot;&quot;</span>
+    <span class="s1">mem = cext.virtual_mem()</span>
+    <span class="s1">total</span><span class="s3">, </span><span class="s1">free</span><span class="s3">, </span><span class="s1">active</span><span class="s3">, </span><span class="s1">inactive</span><span class="s3">, </span><span class="s1">wired</span><span class="s3">, </span><span class="s1">cached</span><span class="s3">, </span><span class="s1">buffers</span><span class="s3">, </span><span class="s1">shared = mem</span>
+    <span class="s3">if </span><span class="s1">NETBSD:</span>
+        <span class="s0"># On NetBSD buffers and shared mem is determined via /proc.</span>
+        <span class="s0"># The C ext set them to 0.</span>
+        <span class="s3">with </span><span class="s1">open(</span><span class="s4">'/proc/meminfo'</span><span class="s3">, </span><span class="s4">'rb'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s3">for </span><span class="s1">line </span><span class="s3">in </span><span class="s1">f:</span>
+                <span class="s3">if </span><span class="s1">line.startswith(</span><span class="s6">b'Buffers:'</span><span class="s1">):</span>
+                    <span class="s1">buffers = int(line.split()[</span><span class="s5">1</span><span class="s1">]) * </span><span class="s5">1024</span>
+                <span class="s3">elif </span><span class="s1">line.startswith(</span><span class="s6">b'MemShared:'</span><span class="s1">):</span>
+                    <span class="s1">shared = int(line.split()[</span><span class="s5">1</span><span class="s1">]) * </span><span class="s5">1024</span>
+                <span class="s3">elif </span><span class="s1">line.startswith(</span><span class="s6">b'Cached:'</span><span class="s1">):</span>
+                    <span class="s1">cached = int(line.split()[</span><span class="s5">1</span><span class="s1">]) * </span><span class="s5">1024</span>
+    <span class="s1">avail = inactive + cached + free</span>
+    <span class="s1">used = active + wired + cached</span>
+    <span class="s1">percent = usage_percent((total - avail)</span><span class="s3">, </span><span class="s1">total</span><span class="s3">, </span><span class="s1">round_=</span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s3">return </span><span class="s1">svmem(total</span><span class="s3">, </span><span class="s1">avail</span><span class="s3">, </span><span class="s1">percent</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free</span><span class="s3">,</span>
+                 <span class="s1">active</span><span class="s3">, </span><span class="s1">inactive</span><span class="s3">, </span><span class="s1">buffers</span><span class="s3">, </span><span class="s1">cached</span><span class="s3">, </span><span class="s1">shared</span><span class="s3">, </span><span class="s1">wired)</span>
+
+
+<span class="s3">def </span><span class="s1">swap_memory():</span>
+    <span class="s2">&quot;&quot;&quot;System swap memory as (total, used, free, sin, sout) namedtuple.&quot;&quot;&quot;</span>
+    <span class="s1">total</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free</span><span class="s3">, </span><span class="s1">sin</span><span class="s3">, </span><span class="s1">sout = cext.swap_mem()</span>
+    <span class="s1">percent = usage_percent(used</span><span class="s3">, </span><span class="s1">total</span><span class="s3">, </span><span class="s1">round_=</span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s3">return </span><span class="s1">_common.sswap(total</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free</span><span class="s3">, </span><span class="s1">percent</span><span class="s3">, </span><span class="s1">sin</span><span class="s3">, </span><span class="s1">sout)</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- CPU</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">def </span><span class="s1">cpu_times():</span>
+    <span class="s2">&quot;&quot;&quot;Return system per-CPU times as a namedtuple&quot;&quot;&quot;</span>
+    <span class="s1">user</span><span class="s3">, </span><span class="s1">nice</span><span class="s3">, </span><span class="s1">system</span><span class="s3">, </span><span class="s1">idle</span><span class="s3">, </span><span class="s1">irq = cext.cpu_times()</span>
+    <span class="s3">return </span><span class="s1">scputimes(user</span><span class="s3">, </span><span class="s1">nice</span><span class="s3">, </span><span class="s1">system</span><span class="s3">, </span><span class="s1">idle</span><span class="s3">, </span><span class="s1">irq)</span>
+
+
+<span class="s3">if </span><span class="s1">HAS_PER_CPU_TIMES:</span>
+    <span class="s3">def </span><span class="s1">per_cpu_times():</span>
+        <span class="s2">&quot;&quot;&quot;Return system CPU times as a namedtuple&quot;&quot;&quot;</span>
+        <span class="s1">ret = []</span>
+        <span class="s3">for </span><span class="s1">cpu_t </span><span class="s3">in </span><span class="s1">cext.per_cpu_times():</span>
+            <span class="s1">user</span><span class="s3">, </span><span class="s1">nice</span><span class="s3">, </span><span class="s1">system</span><span class="s3">, </span><span class="s1">idle</span><span class="s3">, </span><span class="s1">irq = cpu_t</span>
+            <span class="s1">item = scputimes(user</span><span class="s3">, </span><span class="s1">nice</span><span class="s3">, </span><span class="s1">system</span><span class="s3">, </span><span class="s1">idle</span><span class="s3">, </span><span class="s1">irq)</span>
+            <span class="s1">ret.append(item)</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+<span class="s3">else</span><span class="s1">:</span>
+    <span class="s0"># XXX</span>
+    <span class="s0"># Ok, this is very dirty.</span>
+    <span class="s0"># On FreeBSD &lt; 8 we cannot gather per-cpu information, see:</span>
+    <span class="s0"># https://github.com/giampaolo/psutil/issues/226</span>
+    <span class="s0"># If num cpus &gt; 1, on first call we return single cpu times to avoid a</span>
+    <span class="s0"># crash at psutil import time.</span>
+    <span class="s0"># Next calls will fail with NotImplementedError</span>
+    <span class="s3">def </span><span class="s1">per_cpu_times():</span>
+        <span class="s2">&quot;&quot;&quot;Return system CPU times as a namedtuple&quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">cpu_count_logical() == </span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">[cpu_times()]</span>
+        <span class="s3">if </span><span class="s1">per_cpu_times.__called__:</span>
+            <span class="s3">raise </span><span class="s1">NotImplementedError(</span><span class="s4">&quot;supported only starting from FreeBSD 8&quot;</span><span class="s1">)</span>
+        <span class="s1">per_cpu_times.__called__ = </span><span class="s3">True</span>
+        <span class="s3">return </span><span class="s1">[cpu_times()]</span>
+
+    <span class="s1">per_cpu_times.__called__ = </span><span class="s3">False</span>
+
+
+<span class="s3">def </span><span class="s1">cpu_count_logical():</span>
+    <span class="s2">&quot;&quot;&quot;Return the number of logical CPUs in the system.&quot;&quot;&quot;</span>
+    <span class="s3">return </span><span class="s1">cext.cpu_count_logical()</span>
+
+
+<span class="s3">if </span><span class="s1">OPENBSD </span><span class="s3">or </span><span class="s1">NETBSD:</span>
+    <span class="s3">def </span><span class="s1">cpu_count_cores():</span>
+        <span class="s0"># OpenBSD and NetBSD do not implement this.</span>
+        <span class="s3">return </span><span class="s5">1 </span><span class="s3">if </span><span class="s1">cpu_count_logical() == </span><span class="s5">1 </span><span class="s3">else None</span>
+<span class="s3">else</span><span class="s1">:</span>
+    <span class="s3">def </span><span class="s1">cpu_count_cores():</span>
+        <span class="s2">&quot;&quot;&quot;Return the number of CPU cores in the system.&quot;&quot;&quot;</span>
+        <span class="s0"># From the C module we'll get an XML string similar to this:</span>
+        <span class="s0"># http://manpages.ubuntu.com/manpages/precise/man4/smp.4freebsd.html</span>
+        <span class="s0"># We may get None in case &quot;sysctl kern.sched.topology_spec&quot;</span>
+        <span class="s0"># is not supported on this BSD version, in which case we'll mimic</span>
+        <span class="s0"># os.cpu_count() and return None.</span>
+        <span class="s1">ret = </span><span class="s3">None</span>
+        <span class="s1">s = cext.cpu_topology()</span>
+        <span class="s3">if </span><span class="s1">s </span><span class="s3">is not None</span><span class="s1">:</span>
+            <span class="s0"># get rid of padding chars appended at the end of the string</span>
+            <span class="s1">index = s.rfind(</span><span class="s4">&quot;&lt;/groups&gt;&quot;</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">index != -</span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s1">s = s[:index + </span><span class="s5">9</span><span class="s1">]</span>
+                <span class="s1">root = ET.fromstring(s)</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s1">ret = len(root.findall(</span><span class="s4">'group/children/group/cpu'</span><span class="s1">)) </span><span class="s3">or None</span>
+                <span class="s3">finally</span><span class="s1">:</span>
+                    <span class="s0"># needed otherwise it will memleak</span>
+                    <span class="s1">root.clear()</span>
+        <span class="s3">if not </span><span class="s1">ret:</span>
+            <span class="s0"># If logical CPUs == 1 it's obvious we' have only 1 core.</span>
+            <span class="s3">if </span><span class="s1">cpu_count_logical() == </span><span class="s5">1</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s5">1</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+
+
+<span class="s3">def </span><span class="s1">cpu_stats():</span>
+    <span class="s2">&quot;&quot;&quot;Return various CPU stats as a named tuple.&quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">FREEBSD:</span>
+        <span class="s0"># Note: the C ext is returning some metrics we are not exposing:</span>
+        <span class="s0"># traps.</span>
+        <span class="s1">ctxsw</span><span class="s3">, </span><span class="s1">intrs</span><span class="s3">, </span><span class="s1">soft_intrs</span><span class="s3">, </span><span class="s1">syscalls</span><span class="s3">, </span><span class="s1">traps = cext.cpu_stats()</span>
+    <span class="s3">elif </span><span class="s1">NETBSD:</span>
+        <span class="s0"># XXX</span>
+        <span class="s0"># Note about intrs: the C extension returns 0. intrs</span>
+        <span class="s0"># can be determined via /proc/stat; it has the same value as</span>
+        <span class="s0"># soft_intrs thought so the kernel is faking it (?).</span>
+        <span class="s0">#</span>
+        <span class="s0"># Note about syscalls: the C extension always sets it to 0 (?).</span>
+        <span class="s0">#</span>
+        <span class="s0"># Note: the C ext is returning some metrics we are not exposing:</span>
+        <span class="s0"># traps, faults and forks.</span>
+        <span class="s1">ctxsw</span><span class="s3">, </span><span class="s1">intrs</span><span class="s3">, </span><span class="s1">soft_intrs</span><span class="s3">, </span><span class="s1">syscalls</span><span class="s3">, </span><span class="s1">traps</span><span class="s3">, </span><span class="s1">faults</span><span class="s3">, </span><span class="s1">forks = \</span>
+            <span class="s1">cext.cpu_stats()</span>
+        <span class="s3">with </span><span class="s1">open(</span><span class="s4">'/proc/stat'</span><span class="s3">, </span><span class="s4">'rb'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s3">for </span><span class="s1">line </span><span class="s3">in </span><span class="s1">f:</span>
+                <span class="s3">if </span><span class="s1">line.startswith(</span><span class="s6">b'intr'</span><span class="s1">):</span>
+                    <span class="s1">intrs = int(line.split()[</span><span class="s5">1</span><span class="s1">])</span>
+    <span class="s3">elif </span><span class="s1">OPENBSD:</span>
+        <span class="s0"># Note: the C ext is returning some metrics we are not exposing:</span>
+        <span class="s0"># traps, faults and forks.</span>
+        <span class="s1">ctxsw</span><span class="s3">, </span><span class="s1">intrs</span><span class="s3">, </span><span class="s1">soft_intrs</span><span class="s3">, </span><span class="s1">syscalls</span><span class="s3">, </span><span class="s1">traps</span><span class="s3">, </span><span class="s1">faults</span><span class="s3">, </span><span class="s1">forks = \</span>
+            <span class="s1">cext.cpu_stats()</span>
+    <span class="s3">return </span><span class="s1">_common.scpustats(ctxsw</span><span class="s3">, </span><span class="s1">intrs</span><span class="s3">, </span><span class="s1">soft_intrs</span><span class="s3">, </span><span class="s1">syscalls)</span>
+
+
+<span class="s3">if </span><span class="s1">FREEBSD:</span>
+    <span class="s3">def </span><span class="s1">cpu_freq():</span>
+        <span class="s2">&quot;&quot;&quot;Return frequency metrics for CPUs. As of Dec 2018 only 
+        CPU 0 appears to be supported by FreeBSD and all other cores 
+        match the frequency of CPU 0. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">ret = []</span>
+        <span class="s1">num_cpus = cpu_count_logical()</span>
+        <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">range(num_cpus):</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">current</span><span class="s3">, </span><span class="s1">available_freq = cext.cpu_freq(cpu)</span>
+            <span class="s3">except </span><span class="s1">NotImplementedError:</span>
+                <span class="s3">continue</span>
+            <span class="s3">if </span><span class="s1">available_freq:</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s1">min_freq = int(available_freq.split(</span><span class="s4">&quot; &quot;</span><span class="s1">)[-</span><span class="s5">1</span><span class="s1">].split(</span><span class="s4">&quot;/&quot;</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">])</span>
+                <span class="s3">except </span><span class="s1">(IndexError</span><span class="s3">, </span><span class="s1">ValueError):</span>
+                    <span class="s1">min_freq = </span><span class="s3">None</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s1">max_freq = int(available_freq.split(</span><span class="s4">&quot; &quot;</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">].split(</span><span class="s4">&quot;/&quot;</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">])</span>
+                <span class="s3">except </span><span class="s1">(IndexError</span><span class="s3">, </span><span class="s1">ValueError):</span>
+                    <span class="s1">max_freq = </span><span class="s3">None</span>
+            <span class="s1">ret.append(_common.scpufreq(current</span><span class="s3">, </span><span class="s1">min_freq</span><span class="s3">, </span><span class="s1">max_freq))</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+<span class="s3">elif </span><span class="s1">OPENBSD:</span>
+    <span class="s3">def </span><span class="s1">cpu_freq():</span>
+        <span class="s1">curr = float(cext.cpu_freq())</span>
+        <span class="s3">return </span><span class="s1">[_common.scpufreq(curr</span><span class="s3">, </span><span class="s5">0.0</span><span class="s3">, </span><span class="s5">0.0</span><span class="s1">)]</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- disks</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">def </span><span class="s1">disk_partitions(all=</span><span class="s3">False</span><span class="s1">):</span>
+    <span class="s2">&quot;&quot;&quot;Return mounted disk partitions as a list of namedtuples. 
+    'all' argument is ignored, see: 
+    https://github.com/giampaolo/psutil/issues/906 
+    &quot;&quot;&quot;</span>
+    <span class="s1">retlist = []</span>
+    <span class="s1">partitions = cext.disk_partitions()</span>
+    <span class="s3">for </span><span class="s1">partition </span><span class="s3">in </span><span class="s1">partitions:</span>
+        <span class="s1">device</span><span class="s3">, </span><span class="s1">mountpoint</span><span class="s3">, </span><span class="s1">fstype</span><span class="s3">, </span><span class="s1">opts = partition</span>
+        <span class="s1">maxfile = maxpath = </span><span class="s3">None  </span><span class="s0"># set later</span>
+        <span class="s1">ntuple = _common.sdiskpart(device</span><span class="s3">, </span><span class="s1">mountpoint</span><span class="s3">, </span><span class="s1">fstype</span><span class="s3">, </span><span class="s1">opts</span><span class="s3">,</span>
+                                   <span class="s1">maxfile</span><span class="s3">, </span><span class="s1">maxpath)</span>
+        <span class="s1">retlist.append(ntuple)</span>
+    <span class="s3">return </span><span class="s1">retlist</span>
+
+
+<span class="s1">disk_usage = _psposix.disk_usage</span>
+<span class="s1">disk_io_counters = cext.disk_io_counters</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- network</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s1">net_io_counters = cext.net_io_counters</span>
+<span class="s1">net_if_addrs = cext_posix.net_if_addrs</span>
+
+
+<span class="s3">def </span><span class="s1">net_if_stats():</span>
+    <span class="s2">&quot;&quot;&quot;Get NIC stats (isup, duplex, speed, mtu).&quot;&quot;&quot;</span>
+    <span class="s1">names = net_io_counters().keys()</span>
+    <span class="s1">ret = {}</span>
+    <span class="s3">for </span><span class="s1">name </span><span class="s3">in </span><span class="s1">names:</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">mtu = cext_posix.net_if_mtu(name)</span>
+            <span class="s1">flags = cext_posix.net_if_flags(name)</span>
+            <span class="s1">duplex</span><span class="s3">, </span><span class="s1">speed = cext_posix.net_if_duplex_speed(name)</span>
+        <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">err:</span>
+            <span class="s0"># https://github.com/giampaolo/psutil/issues/1279</span>
+            <span class="s3">if </span><span class="s1">err.errno != errno.ENODEV:</span>
+                <span class="s3">raise</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">if </span><span class="s1">hasattr(_common</span><span class="s3">, </span><span class="s4">'NicDuplex'</span><span class="s1">):</span>
+                <span class="s1">duplex = _common.NicDuplex(duplex)</span>
+            <span class="s1">output_flags = </span><span class="s4">','</span><span class="s1">.join(flags)</span>
+            <span class="s1">isup = </span><span class="s4">'running' </span><span class="s3">in </span><span class="s1">flags</span>
+            <span class="s1">ret[name] = _common.snicstats(isup</span><span class="s3">, </span><span class="s1">duplex</span><span class="s3">, </span><span class="s1">speed</span><span class="s3">, </span><span class="s1">mtu</span><span class="s3">,</span>
+                                          <span class="s1">output_flags)</span>
+    <span class="s3">return </span><span class="s1">ret</span>
+
+
+<span class="s3">def </span><span class="s1">net_connections(kind):</span>
+    <span class="s2">&quot;&quot;&quot;System-wide network connections.&quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">OPENBSD:</span>
+        <span class="s1">ret = []</span>
+        <span class="s3">for </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">pids():</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">cons = Process(pid).connections(kind)</span>
+            <span class="s3">except </span><span class="s1">(NoSuchProcess</span><span class="s3">, </span><span class="s1">ZombieProcess):</span>
+                <span class="s3">continue</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">for </span><span class="s1">conn </span><span class="s3">in </span><span class="s1">cons:</span>
+                    <span class="s1">conn = list(conn)</span>
+                    <span class="s1">conn.append(pid)</span>
+                    <span class="s1">ret.append(_common.sconn(*conn))</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+
+    <span class="s3">if </span><span class="s1">kind </span><span class="s3">not in </span><span class="s1">_common.conn_tmap:</span>
+        <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid %r kind argument; choose between %s&quot;</span>
+                         <span class="s1">% (kind</span><span class="s3">, </span><span class="s4">', '</span><span class="s1">.join([repr(x) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">conn_tmap])))</span>
+    <span class="s1">families</span><span class="s3">, </span><span class="s1">types = conn_tmap[kind]</span>
+    <span class="s1">ret = set()</span>
+    <span class="s3">if </span><span class="s1">NETBSD:</span>
+        <span class="s1">rawlist = cext.net_connections(-</span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">rawlist = cext.net_connections()</span>
+    <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">rawlist:</span>
+        <span class="s1">fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">, </span><span class="s1">pid = item</span>
+        <span class="s0"># TODO: apply filter at C level</span>
+        <span class="s3">if </span><span class="s1">fam </span><span class="s3">in </span><span class="s1">families </span><span class="s3">and </span><span class="s1">type </span><span class="s3">in </span><span class="s1">types:</span>
+            <span class="s1">nt = conn_to_ntuple(fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">,</span>
+                                <span class="s1">TCP_STATUSES</span><span class="s3">, </span><span class="s1">pid)</span>
+            <span class="s1">ret.add(nt)</span>
+    <span class="s3">return </span><span class="s1">list(ret)</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0">#  --- sensors</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">if </span><span class="s1">FREEBSD:</span>
+
+    <span class="s3">def </span><span class="s1">sensors_battery():</span>
+        <span class="s2">&quot;&quot;&quot;Return battery info.&quot;&quot;&quot;</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">percent</span><span class="s3">, </span><span class="s1">minsleft</span><span class="s3">, </span><span class="s1">power_plugged = cext.sensors_battery()</span>
+        <span class="s3">except </span><span class="s1">NotImplementedError:</span>
+            <span class="s0"># See: https://github.com/giampaolo/psutil/issues/1074</span>
+            <span class="s3">return None</span>
+        <span class="s1">power_plugged = power_plugged == </span><span class="s5">1</span>
+        <span class="s3">if </span><span class="s1">power_plugged:</span>
+            <span class="s1">secsleft = _common.POWER_TIME_UNLIMITED</span>
+        <span class="s3">elif </span><span class="s1">minsleft == -</span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s1">secsleft = _common.POWER_TIME_UNKNOWN</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">secsleft = minsleft * </span><span class="s5">60</span>
+        <span class="s3">return </span><span class="s1">_common.sbattery(percent</span><span class="s3">, </span><span class="s1">secsleft</span><span class="s3">, </span><span class="s1">power_plugged)</span>
+
+    <span class="s3">def </span><span class="s1">sensors_temperatures():</span>
+        <span class="s2">&quot;&quot;&quot;Return CPU cores temperatures if available, else an empty dict.&quot;&quot;&quot;</span>
+        <span class="s1">ret = defaultdict(list)</span>
+        <span class="s1">num_cpus = cpu_count_logical()</span>
+        <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">range(num_cpus):</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">current</span><span class="s3">, </span><span class="s1">high = cext.sensors_cpu_temperature(cpu)</span>
+                <span class="s3">if </span><span class="s1">high &lt;= </span><span class="s5">0</span><span class="s1">:</span>
+                    <span class="s1">high = </span><span class="s3">None</span>
+                <span class="s1">name = </span><span class="s4">&quot;Core %s&quot; </span><span class="s1">% cpu</span>
+                <span class="s1">ret[</span><span class="s4">&quot;coretemp&quot;</span><span class="s1">].append(</span>
+                    <span class="s1">_common.shwtemp(name</span><span class="s3">, </span><span class="s1">current</span><span class="s3">, </span><span class="s1">high</span><span class="s3">, </span><span class="s1">high))</span>
+            <span class="s3">except </span><span class="s1">NotImplementedError:</span>
+                <span class="s3">pass</span>
+
+        <span class="s3">return </span><span class="s1">ret</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0">#  --- other system functions</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s3">def </span><span class="s1">boot_time():</span>
+    <span class="s2">&quot;&quot;&quot;The system boot time expressed in seconds since the epoch.&quot;&quot;&quot;</span>
+    <span class="s3">return </span><span class="s1">cext.boot_time()</span>
+
+
+<span class="s3">def </span><span class="s1">users():</span>
+    <span class="s2">&quot;&quot;&quot;Return currently connected users as a list of namedtuples.&quot;&quot;&quot;</span>
+    <span class="s1">retlist = []</span>
+    <span class="s1">rawlist = cext.users()</span>
+    <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">rawlist:</span>
+        <span class="s1">user</span><span class="s3">, </span><span class="s1">tty</span><span class="s3">, </span><span class="s1">hostname</span><span class="s3">, </span><span class="s1">tstamp</span><span class="s3">, </span><span class="s1">pid = item</span>
+        <span class="s3">if </span><span class="s1">pid == -</span><span class="s5">1</span><span class="s1">:</span>
+            <span class="s3">assert </span><span class="s1">OPENBSD</span>
+            <span class="s1">pid = </span><span class="s3">None</span>
+        <span class="s3">if </span><span class="s1">tty == </span><span class="s4">'~'</span><span class="s1">:</span>
+            <span class="s3">continue  </span><span class="s0"># reboot or shutdown</span>
+        <span class="s1">nt = _common.suser(user</span><span class="s3">, </span><span class="s1">tty </span><span class="s3">or None, </span><span class="s1">hostname</span><span class="s3">, </span><span class="s1">tstamp</span><span class="s3">, </span><span class="s1">pid)</span>
+        <span class="s1">retlist.append(nt)</span>
+    <span class="s3">return </span><span class="s1">retlist</span>
+
+
+<span class="s0"># =====================================================================</span>
+<span class="s0"># --- processes</span>
+<span class="s0"># =====================================================================</span>
+
+
+<span class="s1">@memoize</span>
+<span class="s3">def </span><span class="s1">_pid_0_exists():</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">Process(</span><span class="s5">0</span><span class="s1">).name()</span>
+    <span class="s3">except </span><span class="s1">NoSuchProcess:</span>
+        <span class="s3">return False</span>
+    <span class="s3">except </span><span class="s1">AccessDenied:</span>
+        <span class="s3">return True</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">return True</span>
+
+
+<span class="s3">def </span><span class="s1">pids():</span>
+    <span class="s2">&quot;&quot;&quot;Returns a list of PIDs currently running on the system.&quot;&quot;&quot;</span>
+    <span class="s1">ret = cext.pids()</span>
+    <span class="s3">if </span><span class="s1">OPENBSD </span><span class="s3">and </span><span class="s1">(</span><span class="s5">0 </span><span class="s3">not in </span><span class="s1">ret) </span><span class="s3">and </span><span class="s1">_pid_0_exists():</span>
+        <span class="s0"># On OpenBSD the kernel does not return PID 0 (neither does</span>
+        <span class="s0"># ps) but it's actually querable (Process(0) will succeed).</span>
+        <span class="s1">ret.insert(</span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+    <span class="s3">return </span><span class="s1">ret</span>
+
+
+<span class="s3">if </span><span class="s1">OPENBSD </span><span class="s3">or </span><span class="s1">NETBSD:</span>
+    <span class="s3">def </span><span class="s1">pid_exists(pid):</span>
+        <span class="s2">&quot;&quot;&quot;Return True if pid exists.&quot;&quot;&quot;</span>
+        <span class="s1">exists = _psposix.pid_exists(pid)</span>
+        <span class="s3">if not </span><span class="s1">exists:</span>
+            <span class="s0"># We do this because _psposix.pid_exists() lies in case of</span>
+            <span class="s0"># zombie processes.</span>
+            <span class="s3">return </span><span class="s1">pid </span><span class="s3">in </span><span class="s1">pids()</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return True</span>
+<span class="s3">else</span><span class="s1">:</span>
+    <span class="s1">pid_exists = _psposix.pid_exists</span>
+
+
+<span class="s3">def </span><span class="s1">is_zombie(pid):</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">st = cext.proc_oneshot_info(pid)[kinfo_proc_map[</span><span class="s4">'status'</span><span class="s1">]]</span>
+        <span class="s3">return </span><span class="s1">st == cext.SZOMB</span>
+    <span class="s3">except </span><span class="s1">Exception:</span>
+        <span class="s3">return False</span>
+
+
+<span class="s3">def </span><span class="s1">wrap_exceptions(fun):</span>
+    <span class="s2">&quot;&quot;&quot;Decorator which translates bare OSError exceptions into 
+    NoSuchProcess and AccessDenied. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">@functools.wraps(fun)</span>
+    <span class="s3">def </span><span class="s1">wrapper(self</span><span class="s3">, </span><span class="s1">*args</span><span class="s3">, </span><span class="s1">**kwargs):</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">fun(self</span><span class="s3">, </span><span class="s1">*args</span><span class="s3">, </span><span class="s1">**kwargs)</span>
+        <span class="s3">except </span><span class="s1">ProcessLookupError:</span>
+            <span class="s3">if </span><span class="s1">is_zombie(self.pid):</span>
+                <span class="s3">raise </span><span class="s1">ZombieProcess(self.pid</span><span class="s3">, </span><span class="s1">self._name</span><span class="s3">, </span><span class="s1">self._ppid)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">raise </span><span class="s1">NoSuchProcess(self.pid</span><span class="s3">, </span><span class="s1">self._name)</span>
+        <span class="s3">except </span><span class="s1">PermissionError:</span>
+            <span class="s3">raise </span><span class="s1">AccessDenied(self.pid</span><span class="s3">, </span><span class="s1">self._name)</span>
+        <span class="s3">except </span><span class="s1">OSError:</span>
+            <span class="s3">if </span><span class="s1">self.pid == </span><span class="s5">0</span><span class="s1">:</span>
+                <span class="s3">if </span><span class="s5">0 </span><span class="s3">in </span><span class="s1">pids():</span>
+                    <span class="s3">raise </span><span class="s1">AccessDenied(self.pid</span><span class="s3">, </span><span class="s1">self._name)</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s3">raise</span>
+            <span class="s3">raise</span>
+    <span class="s3">return </span><span class="s1">wrapper</span>
+
+
+<span class="s1">@contextlib.contextmanager</span>
+<span class="s3">def </span><span class="s1">wrap_exceptions_procfs(inst):</span>
+    <span class="s2">&quot;&quot;&quot;Same as above, for routines relying on reading /proc fs.&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s3">yield</span>
+    <span class="s3">except </span><span class="s1">(ProcessLookupError</span><span class="s3">, </span><span class="s1">FileNotFoundError):</span>
+        <span class="s0"># ENOENT (no such file or directory) gets raised on open().</span>
+        <span class="s0"># ESRCH (no such process) can get raised on read() if</span>
+        <span class="s0"># process is gone in meantime.</span>
+        <span class="s3">if </span><span class="s1">is_zombie(inst.pid):</span>
+            <span class="s3">raise </span><span class="s1">ZombieProcess(inst.pid</span><span class="s3">, </span><span class="s1">inst._name</span><span class="s3">, </span><span class="s1">inst._ppid)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">NoSuchProcess(inst.pid</span><span class="s3">, </span><span class="s1">inst._name)</span>
+    <span class="s3">except </span><span class="s1">PermissionError:</span>
+        <span class="s3">raise </span><span class="s1">AccessDenied(inst.pid</span><span class="s3">, </span><span class="s1">inst._name)</span>
+
+
+<span class="s3">class </span><span class="s1">Process(object):</span>
+    <span class="s2">&quot;&quot;&quot;Wrapper class around underlying C implementation.&quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ = [</span><span class="s4">&quot;pid&quot;</span><span class="s3">, </span><span class="s4">&quot;_name&quot;</span><span class="s3">, </span><span class="s4">&quot;_ppid&quot;</span><span class="s3">, </span><span class="s4">&quot;_cache&quot;</span><span class="s1">]</span>
+
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">pid):</span>
+        <span class="s1">self.pid = pid</span>
+        <span class="s1">self._name = </span><span class="s3">None</span>
+        <span class="s1">self._ppid = </span><span class="s3">None</span>
+
+    <span class="s3">def </span><span class="s1">_assert_alive(self):</span>
+        <span class="s2">&quot;&quot;&quot;Raise NSP if the process disappeared on us.&quot;&quot;&quot;</span>
+        <span class="s0"># For those C function who do not raise NSP, possibly returning</span>
+        <span class="s0"># incorrect or incomplete result.</span>
+        <span class="s1">cext.proc_name(self.pid)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s1">@memoize_when_activated</span>
+    <span class="s3">def </span><span class="s1">oneshot(self):</span>
+        <span class="s2">&quot;&quot;&quot;Retrieves multiple process info in one shot as a raw tuple.&quot;&quot;&quot;</span>
+        <span class="s1">ret = cext.proc_oneshot_info(self.pid)</span>
+        <span class="s3">assert </span><span class="s1">len(ret) == len(kinfo_proc_map)</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+
+    <span class="s3">def </span><span class="s1">oneshot_enter(self):</span>
+        <span class="s1">self.oneshot.cache_activate(self)</span>
+
+    <span class="s3">def </span><span class="s1">oneshot_exit(self):</span>
+        <span class="s1">self.oneshot.cache_deactivate(self)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">name(self):</span>
+        <span class="s1">name = self.oneshot()[kinfo_proc_map[</span><span class="s4">'name'</span><span class="s1">]]</span>
+        <span class="s3">return </span><span class="s1">name </span><span class="s3">if </span><span class="s1">name </span><span class="s3">is not None else </span><span class="s1">cext.proc_name(self.pid)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">exe(self):</span>
+        <span class="s3">if </span><span class="s1">FREEBSD:</span>
+            <span class="s3">if </span><span class="s1">self.pid == </span><span class="s5">0</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s4">''  </span><span class="s0"># else NSP</span>
+            <span class="s3">return </span><span class="s1">cext.proc_exe(self.pid)</span>
+        <span class="s3">elif </span><span class="s1">NETBSD:</span>
+            <span class="s3">if </span><span class="s1">self.pid == </span><span class="s5">0</span><span class="s1">:</span>
+                <span class="s0"># /proc/0 dir exists but /proc/0/exe doesn't</span>
+                <span class="s3">return </span><span class="s4">&quot;&quot;</span>
+            <span class="s3">with </span><span class="s1">wrap_exceptions_procfs(self):</span>
+                <span class="s3">return </span><span class="s1">os.readlink(</span><span class="s4">&quot;/proc/%s/exe&quot; </span><span class="s1">% self.pid)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s0"># OpenBSD: exe cannot be determined; references:</span>
+            <span class="s0"># https://chromium.googlesource.com/chromium/src/base/+/</span>
+            <span class="s0">#     master/base_paths_posix.cc</span>
+            <span class="s0"># We try our best guess by using which against the first</span>
+            <span class="s0"># cmdline arg (may return None).</span>
+            <span class="s1">cmdline = self.cmdline()</span>
+            <span class="s3">if </span><span class="s1">cmdline:</span>
+                <span class="s3">return </span><span class="s1">which(cmdline[</span><span class="s5">0</span><span class="s1">]) </span><span class="s3">or </span><span class="s4">&quot;&quot;</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s4">&quot;&quot;</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">cmdline(self):</span>
+        <span class="s3">if </span><span class="s1">OPENBSD </span><span class="s3">and </span><span class="s1">self.pid == </span><span class="s5">0</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">[]  </span><span class="s0"># ...else it crashes</span>
+        <span class="s3">elif </span><span class="s1">NETBSD:</span>
+            <span class="s0"># XXX - most of the times the underlying sysctl() call on Net</span>
+            <span class="s0"># and Open BSD returns a truncated string.</span>
+            <span class="s0"># Also /proc/pid/cmdline behaves the same so it looks</span>
+            <span class="s0"># like this is a kernel bug.</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s1">cext.proc_cmdline(self.pid)</span>
+            <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">err:</span>
+                <span class="s3">if </span><span class="s1">err.errno == errno.EINVAL:</span>
+                    <span class="s3">if </span><span class="s1">is_zombie(self.pid):</span>
+                        <span class="s3">raise </span><span class="s1">ZombieProcess(self.pid</span><span class="s3">, </span><span class="s1">self._name</span><span class="s3">, </span><span class="s1">self._ppid)</span>
+                    <span class="s3">elif not </span><span class="s1">pid_exists(self.pid):</span>
+                        <span class="s3">raise </span><span class="s1">NoSuchProcess(self.pid</span><span class="s3">, </span><span class="s1">self._name</span><span class="s3">, </span><span class="s1">self._ppid)</span>
+                    <span class="s3">else</span><span class="s1">:</span>
+                        <span class="s0"># XXX: this happens with unicode tests. It means the C</span>
+                        <span class="s0"># routine is unable to decode invalid unicode chars.</span>
+                        <span class="s3">return </span><span class="s1">[]</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s3">raise</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">cext.proc_cmdline(self.pid)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">environ(self):</span>
+        <span class="s3">return </span><span class="s1">cext.proc_environ(self.pid)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">terminal(self):</span>
+        <span class="s1">tty_nr = self.oneshot()[kinfo_proc_map[</span><span class="s4">'ttynr'</span><span class="s1">]]</span>
+        <span class="s1">tmap = _psposix.get_terminal_map()</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">tmap[tty_nr]</span>
+        <span class="s3">except </span><span class="s1">KeyError:</span>
+            <span class="s3">return None</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">ppid(self):</span>
+        <span class="s1">self._ppid = self.oneshot()[kinfo_proc_map[</span><span class="s4">'ppid'</span><span class="s1">]]</span>
+        <span class="s3">return </span><span class="s1">self._ppid</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">uids(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">_common.puids(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'real_uid'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'effective_uid'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'saved_uid'</span><span class="s1">]])</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">gids(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">_common.pgids(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'real_gid'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'effective_gid'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'saved_gid'</span><span class="s1">]])</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">cpu_times(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">_common.pcputimes(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'user_time'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'sys_time'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'ch_user_time'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'ch_sys_time'</span><span class="s1">]])</span>
+
+    <span class="s3">if </span><span class="s1">FREEBSD:</span>
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">cpu_num(self):</span>
+            <span class="s3">return </span><span class="s1">self.oneshot()[kinfo_proc_map[</span><span class="s4">'cpunum'</span><span class="s1">]]</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">memory_info(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">pmem(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'rss'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'vms'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'memtext'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'memdata'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'memstack'</span><span class="s1">]])</span>
+
+    <span class="s1">memory_full_info = memory_info</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">create_time(self):</span>
+        <span class="s3">return </span><span class="s1">self.oneshot()[kinfo_proc_map[</span><span class="s4">'create_time'</span><span class="s1">]]</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">num_threads(self):</span>
+        <span class="s3">if </span><span class="s1">HAS_PROC_NUM_THREADS:</span>
+            <span class="s0"># FreeBSD</span>
+            <span class="s3">return </span><span class="s1">cext.proc_num_threads(self.pid)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">len(self.threads())</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">num_ctx_switches(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">_common.pctxsw(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'ctx_switches_vol'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'ctx_switches_unvol'</span><span class="s1">]])</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">threads(self):</span>
+        <span class="s0"># Note: on OpenSBD this (/dev/mem) requires root access.</span>
+        <span class="s1">rawlist = cext.proc_threads(self.pid)</span>
+        <span class="s1">retlist = []</span>
+        <span class="s3">for </span><span class="s1">thread_id</span><span class="s3">, </span><span class="s1">utime</span><span class="s3">, </span><span class="s1">stime </span><span class="s3">in </span><span class="s1">rawlist:</span>
+            <span class="s1">ntuple = _common.pthread(thread_id</span><span class="s3">, </span><span class="s1">utime</span><span class="s3">, </span><span class="s1">stime)</span>
+            <span class="s1">retlist.append(ntuple)</span>
+        <span class="s3">if </span><span class="s1">OPENBSD:</span>
+            <span class="s1">self._assert_alive()</span>
+        <span class="s3">return </span><span class="s1">retlist</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">connections(self</span><span class="s3">, </span><span class="s1">kind=</span><span class="s4">'inet'</span><span class="s1">):</span>
+        <span class="s3">if </span><span class="s1">kind </span><span class="s3">not in </span><span class="s1">conn_tmap:</span>
+            <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid %r kind argument; choose between %s&quot;</span>
+                             <span class="s1">% (kind</span><span class="s3">, </span><span class="s4">', '</span><span class="s1">.join([repr(x) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">conn_tmap])))</span>
+
+        <span class="s3">if </span><span class="s1">NETBSD:</span>
+            <span class="s1">families</span><span class="s3">, </span><span class="s1">types = conn_tmap[kind]</span>
+            <span class="s1">ret = []</span>
+            <span class="s1">rawlist = cext.net_connections(self.pid)</span>
+            <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">rawlist:</span>
+                <span class="s1">fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">, </span><span class="s1">pid = item</span>
+                <span class="s3">assert </span><span class="s1">pid == self.pid</span>
+                <span class="s3">if </span><span class="s1">fam </span><span class="s3">in </span><span class="s1">families </span><span class="s3">and </span><span class="s1">type </span><span class="s3">in </span><span class="s1">types:</span>
+                    <span class="s1">nt = conn_to_ntuple(fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">,</span>
+                                        <span class="s1">TCP_STATUSES)</span>
+                    <span class="s1">ret.append(nt)</span>
+            <span class="s1">self._assert_alive()</span>
+            <span class="s3">return </span><span class="s1">list(ret)</span>
+
+        <span class="s1">families</span><span class="s3">, </span><span class="s1">types = conn_tmap[kind]</span>
+        <span class="s1">rawlist = cext.proc_connections(self.pid</span><span class="s3">, </span><span class="s1">families</span><span class="s3">, </span><span class="s1">types)</span>
+        <span class="s1">ret = []</span>
+        <span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">rawlist:</span>
+            <span class="s1">fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status = item</span>
+            <span class="s1">nt = conn_to_ntuple(fd</span><span class="s3">, </span><span class="s1">fam</span><span class="s3">, </span><span class="s1">type</span><span class="s3">, </span><span class="s1">laddr</span><span class="s3">, </span><span class="s1">raddr</span><span class="s3">, </span><span class="s1">status</span><span class="s3">,</span>
+                                <span class="s1">TCP_STATUSES)</span>
+            <span class="s1">ret.append(nt)</span>
+
+        <span class="s3">if </span><span class="s1">OPENBSD:</span>
+            <span class="s1">self._assert_alive()</span>
+
+        <span class="s3">return </span><span class="s1">ret</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">wait(self</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s3">None</span><span class="s1">):</span>
+        <span class="s3">return </span><span class="s1">_psposix.wait_pid(self.pid</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">self._name)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">nice_get(self):</span>
+        <span class="s3">return </span><span class="s1">cext_posix.getpriority(self.pid)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">nice_set(self</span><span class="s3">, </span><span class="s1">value):</span>
+        <span class="s3">return </span><span class="s1">cext_posix.setpriority(self.pid</span><span class="s3">, </span><span class="s1">value)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">status(self):</span>
+        <span class="s1">code = self.oneshot()[kinfo_proc_map[</span><span class="s4">'status'</span><span class="s1">]]</span>
+        <span class="s0"># XXX is '?' legit? (we're not supposed to return it anyway)</span>
+        <span class="s3">return </span><span class="s1">PROC_STATUSES.get(code</span><span class="s3">, </span><span class="s4">'?'</span><span class="s1">)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">io_counters(self):</span>
+        <span class="s1">rawtuple = self.oneshot()</span>
+        <span class="s3">return </span><span class="s1">_common.pio(</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'read_io_count'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">rawtuple[kinfo_proc_map[</span><span class="s4">'write_io_count'</span><span class="s1">]]</span><span class="s3">,</span>
+            <span class="s1">-</span><span class="s5">1</span><span class="s3">,</span>
+            <span class="s1">-</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s1">@wrap_exceptions</span>
+    <span class="s3">def </span><span class="s1">cwd(self):</span>
+        <span class="s2">&quot;&quot;&quot;Return process current working directory.&quot;&quot;&quot;</span>
+        <span class="s0"># sometimes we get an empty string, in which case we turn</span>
+        <span class="s0"># it into None</span>
+        <span class="s3">if </span><span class="s1">OPENBSD </span><span class="s3">and </span><span class="s1">self.pid == </span><span class="s5">0</span><span class="s1">:</span>
+            <span class="s3">return None  </span><span class="s0"># ...else it would raise EINVAL</span>
+        <span class="s3">elif </span><span class="s1">NETBSD </span><span class="s3">or </span><span class="s1">HAS_PROC_OPEN_FILES:</span>
+            <span class="s0"># FreeBSD &lt; 8 does not support functions based on</span>
+            <span class="s0"># kinfo_getfile() and kinfo_getvmmap()</span>
+            <span class="s3">return </span><span class="s1">cext.proc_cwd(self.pid) </span><span class="s3">or None</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">NotImplementedError(</span>
+                <span class="s4">&quot;supported only starting from FreeBSD 8&quot; </span><span class="s3">if</span>
+                <span class="s1">FREEBSD </span><span class="s3">else </span><span class="s4">&quot;&quot;</span><span class="s1">)</span>
+
+    <span class="s1">nt_mmap_grouped = namedtuple(</span>
+        <span class="s4">'mmap'</span><span class="s3">, </span><span class="s4">'path rss, private, ref_count, shadow_count'</span><span class="s1">)</span>
+    <span class="s1">nt_mmap_ext = namedtuple(</span>
+        <span class="s4">'mmap'</span><span class="s3">, </span><span class="s4">'addr, perms path rss, private, ref_count, shadow_count'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">_not_implemented(self):</span>
+        <span class="s3">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s0"># FreeBSD &lt; 8 does not support functions based on kinfo_getfile()</span>
+    <span class="s0"># and kinfo_getvmmap()</span>
+    <span class="s3">if </span><span class="s1">HAS_PROC_OPEN_FILES:</span>
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">open_files(self):</span>
+            <span class="s2">&quot;&quot;&quot;Return files opened by process as a list of namedtuples.&quot;&quot;&quot;</span>
+            <span class="s1">rawlist = cext.proc_open_files(self.pid)</span>
+            <span class="s3">return </span><span class="s1">[_common.popenfile(path</span><span class="s3">, </span><span class="s1">fd) </span><span class="s3">for </span><span class="s1">path</span><span class="s3">, </span><span class="s1">fd </span><span class="s3">in </span><span class="s1">rawlist]</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">open_files = _not_implemented</span>
+
+    <span class="s0"># FreeBSD &lt; 8 does not support functions based on kinfo_getfile()</span>
+    <span class="s0"># and kinfo_getvmmap()</span>
+    <span class="s3">if </span><span class="s1">HAS_PROC_NUM_FDS:</span>
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">num_fds(self):</span>
+            <span class="s2">&quot;&quot;&quot;Return the number of file descriptors opened by this process.&quot;&quot;&quot;</span>
+            <span class="s1">ret = cext.proc_num_fds(self.pid)</span>
+            <span class="s3">if </span><span class="s1">NETBSD:</span>
+                <span class="s1">self._assert_alive()</span>
+            <span class="s3">return </span><span class="s1">ret</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">num_fds = _not_implemented</span>
+
+    <span class="s0"># --- FreeBSD only APIs</span>
+
+    <span class="s3">if </span><span class="s1">FREEBSD:</span>
+
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">cpu_affinity_get(self):</span>
+            <span class="s3">return </span><span class="s1">cext.proc_cpu_affinity_get(self.pid)</span>
+
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">cpu_affinity_set(self</span><span class="s3">, </span><span class="s1">cpus):</span>
+            <span class="s0"># Pre-emptively check if CPUs are valid because the C</span>
+            <span class="s0"># function has a weird behavior in case of invalid CPUs,</span>
+            <span class="s0"># see: https://github.com/giampaolo/psutil/issues/586</span>
+            <span class="s1">allcpus = tuple(range(len(per_cpu_times())))</span>
+            <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">cpus:</span>
+                <span class="s3">if </span><span class="s1">cpu </span><span class="s3">not in </span><span class="s1">allcpus:</span>
+                    <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s4">&quot;invalid CPU #%i (choose between %s)&quot;</span>
+                                     <span class="s1">% (cpu</span><span class="s3">, </span><span class="s1">allcpus))</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">cext.proc_cpu_affinity_set(self.pid</span><span class="s3">, </span><span class="s1">cpus)</span>
+            <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">err:</span>
+                <span class="s0"># 'man cpuset_setaffinity' about EDEADLK:</span>
+                <span class="s0"># &lt;&lt;the call would leave a thread without a valid CPU to run</span>
+                <span class="s0"># on because the set does not overlap with the thread's</span>
+                <span class="s0"># anonymous mask&gt;&gt;</span>
+                <span class="s3">if </span><span class="s1">err.errno </span><span class="s3">in </span><span class="s1">(errno.EINVAL</span><span class="s3">, </span><span class="s1">errno.EDEADLK):</span>
+                    <span class="s3">for </span><span class="s1">cpu </span><span class="s3">in </span><span class="s1">cpus:</span>
+                        <span class="s3">if </span><span class="s1">cpu </span><span class="s3">not in </span><span class="s1">allcpus:</span>
+                            <span class="s3">raise </span><span class="s1">ValueError(</span>
+                                <span class="s4">&quot;invalid CPU #%i (choose between %s)&quot; </span><span class="s1">% (</span>
+                                    <span class="s1">cpu</span><span class="s3">, </span><span class="s1">allcpus))</span>
+                <span class="s3">raise</span>
+
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">memory_maps(self):</span>
+            <span class="s3">return </span><span class="s1">cext.proc_memory_maps(self.pid)</span>
+
+        <span class="s1">@wrap_exceptions</span>
+        <span class="s3">def </span><span class="s1">rlimit(self</span><span class="s3">, </span><span class="s1">resource</span><span class="s3">, </span><span class="s1">limits=</span><span class="s3">None</span><span class="s1">):</span>
+            <span class="s3">if </span><span class="s1">limits </span><span class="s3">is None</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s1">cext.proc_getrlimit(self.pid</span><span class="s3">, </span><span class="s1">resource)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s3">if </span><span class="s1">len(limits) != </span><span class="s5">2</span><span class="s1">:</span>
+                    <span class="s3">raise </span><span class="s1">ValueError(</span>
+                        <span class="s4">&quot;second argument must be a (soft, hard) tuple, &quot;</span>
+                        <span class="s4">&quot;got %s&quot; </span><span class="s1">% repr(limits))</span>
+                <span class="s1">soft</span><span class="s3">, </span><span class="s1">hard = limits</span>
+                <span class="s3">return </span><span class="s1">cext.proc_setrlimit(self.pid</span><span class="s3">, </span><span class="s1">resource</span><span class="s3">, </span><span class="s1">soft</span><span class="s3">, </span><span class="s1">hard)</span>
+</pre>
+</body>
+</html>

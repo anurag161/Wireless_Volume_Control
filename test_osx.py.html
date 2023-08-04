@@ -1,0 +1,263 @@
+<html>
+<head>
+<title>test_osx.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6897bb;}
+.s5 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_osx.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot;macOS specific tests.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">platform</span>
+<span class="s3">import </span><span class="s1">re</span>
+<span class="s3">import </span><span class="s1">time</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">MACOS</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">POSIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_BATTERY</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TOLERANCE_DISK_USAGE</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TOLERANCE_SYS_MEM</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry_on_failure</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">sh</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">spawn_testproc</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">terminate</span>
+
+
+<span class="s3">if </span><span class="s1">POSIX:</span>
+    <span class="s3">from </span><span class="s1">psutil._psutil_posix </span><span class="s3">import </span><span class="s1">getpagesize</span>
+
+
+<span class="s3">def </span><span class="s1">sysctl(cmdline):</span>
+    <span class="s2">&quot;&quot;&quot;Expects a sysctl command with an argument and parse the result 
+    returning only the value of interest. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">out = sh(cmdline)</span>
+    <span class="s1">result = out.split()[</span><span class="s4">1</span><span class="s1">]</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s3">return </span><span class="s1">int(result)</span>
+    <span class="s3">except </span><span class="s1">ValueError:</span>
+        <span class="s3">return </span><span class="s1">result</span>
+
+
+<span class="s3">def </span><span class="s1">vm_stat(field):</span>
+    <span class="s2">&quot;&quot;&quot;Wrapper around 'vm_stat' cmdline utility.&quot;&quot;&quot;</span>
+    <span class="s1">out = sh(</span><span class="s5">'vm_stat'</span><span class="s1">)</span>
+    <span class="s3">for </span><span class="s1">line </span><span class="s3">in </span><span class="s1">out.split(</span><span class="s5">'</span><span class="s3">\n</span><span class="s5">'</span><span class="s1">):</span>
+        <span class="s3">if </span><span class="s1">field </span><span class="s3">in </span><span class="s1">line:</span>
+            <span class="s3">break</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s5">&quot;line not found&quot;</span><span class="s1">)</span>
+    <span class="s3">return </span><span class="s1">int(re.search(</span><span class="s5">r'\d+'</span><span class="s3">, </span><span class="s1">line).group(</span><span class="s4">0</span><span class="s1">)) * getpagesize()</span>
+
+
+<span class="s0"># http://code.activestate.com/recipes/578019/</span>
+<span class="s3">def </span><span class="s1">human2bytes(s):</span>
+    <span class="s1">SYMBOLS = {</span>
+        <span class="s5">'customary'</span><span class="s1">: (</span><span class="s5">'B'</span><span class="s3">, </span><span class="s5">'K'</span><span class="s3">, </span><span class="s5">'M'</span><span class="s3">, </span><span class="s5">'G'</span><span class="s3">, </span><span class="s5">'T'</span><span class="s3">, </span><span class="s5">'P'</span><span class="s3">, </span><span class="s5">'E'</span><span class="s3">, </span><span class="s5">'Z'</span><span class="s3">, </span><span class="s5">'Y'</span><span class="s1">)</span><span class="s3">,</span>
+    <span class="s1">}</span>
+    <span class="s1">init = s</span>
+    <span class="s1">num = </span><span class="s5">&quot;&quot;</span>
+    <span class="s3">while </span><span class="s1">s </span><span class="s3">and </span><span class="s1">s[</span><span class="s4">0</span><span class="s1">:</span><span class="s4">1</span><span class="s1">].isdigit() </span><span class="s3">or </span><span class="s1">s[</span><span class="s4">0</span><span class="s1">:</span><span class="s4">1</span><span class="s1">] == </span><span class="s5">'.'</span><span class="s1">:</span>
+        <span class="s1">num += s[</span><span class="s4">0</span><span class="s1">]</span>
+        <span class="s1">s = s[</span><span class="s4">1</span><span class="s1">:]</span>
+    <span class="s1">num = float(num)</span>
+    <span class="s1">letter = s.strip()</span>
+    <span class="s3">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">sset </span><span class="s3">in </span><span class="s1">SYMBOLS.items():</span>
+        <span class="s3">if </span><span class="s1">letter </span><span class="s3">in </span><span class="s1">sset:</span>
+            <span class="s3">break</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">if </span><span class="s1">letter == </span><span class="s5">'k'</span><span class="s1">:</span>
+            <span class="s1">sset = SYMBOLS[</span><span class="s5">'customary'</span><span class="s1">]</span>
+            <span class="s1">letter = letter.upper()</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">raise </span><span class="s1">ValueError(</span><span class="s5">&quot;can't interpret %r&quot; </span><span class="s1">% init)</span>
+    <span class="s1">prefix = {sset[</span><span class="s4">0</span><span class="s1">]: </span><span class="s4">1</span><span class="s1">}</span>
+    <span class="s3">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">s </span><span class="s3">in </span><span class="s1">enumerate(sset[</span><span class="s4">1</span><span class="s1">:]):</span>
+        <span class="s1">prefix[s] = </span><span class="s4">1 </span><span class="s1">&lt;&lt; (i + </span><span class="s4">1</span><span class="s1">) * </span><span class="s4">10</span>
+    <span class="s3">return </span><span class="s1">int(num * prefix[letter])</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">MACOS</span><span class="s3">, </span><span class="s5">&quot;MACOS only&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestProcess(PsutilTestCase):</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">setUpClass(cls):</span>
+        <span class="s1">cls.pid = spawn_testproc().pid</span>
+
+    <span class="s1">@classmethod</span>
+    <span class="s3">def </span><span class="s1">tearDownClass(cls):</span>
+        <span class="s1">terminate(cls.pid)</span>
+
+    <span class="s3">def </span><span class="s1">test_process_create_time(self):</span>
+        <span class="s1">output = sh(</span><span class="s5">&quot;ps -o lstart -p %s&quot; </span><span class="s1">% self.pid)</span>
+        <span class="s1">start_ps = output.replace(</span><span class="s5">'STARTED'</span><span class="s3">, </span><span class="s5">''</span><span class="s1">).strip()</span>
+        <span class="s1">hhmmss = start_ps.split(</span><span class="s5">' '</span><span class="s1">)[-</span><span class="s4">2</span><span class="s1">]</span>
+        <span class="s1">year = start_ps.split(</span><span class="s5">' '</span><span class="s1">)[-</span><span class="s4">1</span><span class="s1">]</span>
+        <span class="s1">start_psutil = psutil.Process(self.pid).create_time()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">hhmmss</span><span class="s3">,</span>
+            <span class="s1">time.strftime(</span><span class="s5">&quot;%H:%M:%S&quot;</span><span class="s3">, </span><span class="s1">time.localtime(start_psutil)))</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">year</span><span class="s3">,</span>
+            <span class="s1">time.strftime(</span><span class="s5">&quot;%Y&quot;</span><span class="s3">, </span><span class="s1">time.localtime(start_psutil)))</span>
+
+
+<span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">MACOS</span><span class="s3">, </span><span class="s5">&quot;MACOS only&quot;</span><span class="s1">)</span>
+<span class="s3">class </span><span class="s1">TestSystemAPIs(PsutilTestCase):</span>
+
+    <span class="s0"># --- disk</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_disks(self):</span>
+        <span class="s0"># test psutil.disk_usage() and psutil.disk_partitions()</span>
+        <span class="s0"># against &quot;df -a&quot;</span>
+        <span class="s3">def </span><span class="s1">df(path):</span>
+            <span class="s1">out = sh(</span><span class="s5">'df -k &quot;%s&quot;' </span><span class="s1">% path).strip()</span>
+            <span class="s1">lines = out.split(</span><span class="s5">'</span><span class="s3">\n</span><span class="s5">'</span><span class="s1">)</span>
+            <span class="s1">lines.pop(</span><span class="s4">0</span><span class="s1">)</span>
+            <span class="s1">line = lines.pop(</span><span class="s4">0</span><span class="s1">)</span>
+            <span class="s1">dev</span><span class="s3">, </span><span class="s1">total</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free = line.split()[:</span><span class="s4">4</span><span class="s1">]</span>
+            <span class="s3">if </span><span class="s1">dev == </span><span class="s5">'none'</span><span class="s1">:</span>
+                <span class="s1">dev = </span><span class="s5">''</span>
+            <span class="s1">total = int(total) * </span><span class="s4">1024</span>
+            <span class="s1">used = int(used) * </span><span class="s4">1024</span>
+            <span class="s1">free = int(free) * </span><span class="s4">1024</span>
+            <span class="s3">return </span><span class="s1">dev</span><span class="s3">, </span><span class="s1">total</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free</span>
+
+        <span class="s3">for </span><span class="s1">part </span><span class="s3">in </span><span class="s1">psutil.disk_partitions(all=</span><span class="s3">False</span><span class="s1">):</span>
+            <span class="s1">usage = psutil.disk_usage(part.mountpoint)</span>
+            <span class="s1">dev</span><span class="s3">, </span><span class="s1">total</span><span class="s3">, </span><span class="s1">used</span><span class="s3">, </span><span class="s1">free = df(part.mountpoint)</span>
+            <span class="s1">self.assertEqual(part.device</span><span class="s3">, </span><span class="s1">dev)</span>
+            <span class="s1">self.assertEqual(usage.total</span><span class="s3">, </span><span class="s1">total)</span>
+            <span class="s1">self.assertAlmostEqual(usage.free</span><span class="s3">, </span><span class="s1">free</span><span class="s3">,</span>
+                                   <span class="s1">delta=TOLERANCE_DISK_USAGE)</span>
+            <span class="s1">self.assertAlmostEqual(usage.used</span><span class="s3">, </span><span class="s1">used</span><span class="s3">,</span>
+                                   <span class="s1">delta=TOLERANCE_DISK_USAGE)</span>
+
+    <span class="s0"># --- cpu</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_logical(self):</span>
+        <span class="s1">num = sysctl(</span><span class="s5">&quot;sysctl hw.logicalcpu&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(num</span><span class="s3">, </span><span class="s1">psutil.cpu_count(logical=</span><span class="s3">True</span><span class="s1">))</span>
+
+    <span class="s3">def </span><span class="s1">test_cpu_count_cores(self):</span>
+        <span class="s1">num = sysctl(</span><span class="s5">&quot;sysctl hw.physicalcpu&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(num</span><span class="s3">, </span><span class="s1">psutil.cpu_count(logical=</span><span class="s3">False</span><span class="s1">))</span>
+
+    <span class="s0"># TODO: remove this once 1892 is fixed</span>
+    <span class="s1">@unittest.skipIf(platform.machine() == </span><span class="s5">'arm64'</span><span class="s3">, </span><span class="s5">&quot;skipped due to #1892&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_cpu_freq(self):</span>
+        <span class="s1">freq = psutil.cpu_freq()</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">freq.current * </span><span class="s4">1000 </span><span class="s1">* </span><span class="s4">1000</span><span class="s3">, </span><span class="s1">sysctl(</span><span class="s5">&quot;sysctl hw.cpufrequency&quot;</span><span class="s1">))</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">freq.min * </span><span class="s4">1000 </span><span class="s1">* </span><span class="s4">1000</span><span class="s3">, </span><span class="s1">sysctl(</span><span class="s5">&quot;sysctl hw.cpufrequency_min&quot;</span><span class="s1">))</span>
+        <span class="s1">self.assertEqual(</span>
+            <span class="s1">freq.max * </span><span class="s4">1000 </span><span class="s1">* </span><span class="s4">1000</span><span class="s3">, </span><span class="s1">sysctl(</span><span class="s5">&quot;sysctl hw.cpufrequency_max&quot;</span><span class="s1">))</span>
+
+    <span class="s0"># --- virtual mem</span>
+
+    <span class="s3">def </span><span class="s1">test_vmem_total(self):</span>
+        <span class="s1">sysctl_hwphymem = sysctl(</span><span class="s5">'sysctl hw.memsize'</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(sysctl_hwphymem</span><span class="s3">, </span><span class="s1">psutil.virtual_memory().total)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_vmem_free(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;free&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.virtual_memory().free</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_vmem_active(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;active&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.virtual_memory().active</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_vmem_inactive(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;inactive&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.virtual_memory().inactive</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_vmem_wired(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;wired&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.virtual_memory().wired</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s0"># --- swap mem</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_swapmem_sin(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;Pageins&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.swap_memory().sin</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_swapmem_sout(self):</span>
+        <span class="s1">vmstat_val = vm_stat(</span><span class="s5">&quot;Pageout&quot;</span><span class="s1">)</span>
+        <span class="s1">psutil_val = psutil.swap_memory().sout</span>
+        <span class="s1">self.assertAlmostEqual(psutil_val</span><span class="s3">, </span><span class="s1">vmstat_val</span><span class="s3">, </span><span class="s1">delta=TOLERANCE_SYS_MEM)</span>
+
+    <span class="s0"># Not very reliable.</span>
+    <span class="s0"># def test_swapmem_total(self):</span>
+    <span class="s0">#     out = sh('sysctl vm.swapusage')</span>
+    <span class="s0">#     out = out.replace('vm.swapusage: ', '')</span>
+    <span class="s0">#     total, used, free = re.findall('\d+.\d+\w', out)</span>
+    <span class="s0">#     psutil_smem = psutil.swap_memory()</span>
+    <span class="s0">#     self.assertEqual(psutil_smem.total, human2bytes(total))</span>
+    <span class="s0">#     self.assertEqual(psutil_smem.used, human2bytes(used))</span>
+    <span class="s0">#     self.assertEqual(psutil_smem.free, human2bytes(free))</span>
+
+    <span class="s0"># --- network</span>
+
+    <span class="s3">def </span><span class="s1">test_net_if_stats(self):</span>
+        <span class="s3">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">stats </span><span class="s3">in </span><span class="s1">psutil.net_if_stats().items():</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">out = sh(</span><span class="s5">&quot;ifconfig %s&quot; </span><span class="s1">% name)</span>
+            <span class="s3">except </span><span class="s1">RuntimeError:</span>
+                <span class="s3">pass</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self.assertEqual(stats.isup</span><span class="s3">, </span><span class="s5">'RUNNING' </span><span class="s3">in </span><span class="s1">out</span><span class="s3">, </span><span class="s1">msg=out)</span>
+                <span class="s1">self.assertEqual(stats.mtu</span><span class="s3">,</span>
+                                 <span class="s1">int(re.findall(</span><span class="s5">r'mtu (\d+)'</span><span class="s3">, </span><span class="s1">out)[</span><span class="s4">0</span><span class="s1">]))</span>
+
+    <span class="s0"># --- sensors_battery</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">HAS_BATTERY</span><span class="s3">, </span><span class="s5">&quot;no battery&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_sensors_battery(self):</span>
+        <span class="s1">out = sh(</span><span class="s5">&quot;pmset -g batt&quot;</span><span class="s1">)</span>
+        <span class="s1">percent = re.search(</span><span class="s5">r&quot;(\d+)%&quot;</span><span class="s3">, </span><span class="s1">out).group(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">drawing_from = re.search(</span><span class="s5">&quot;Now drawing from '([^']+)'&quot;</span><span class="s3">, </span><span class="s1">out).group(</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">power_plugged = drawing_from == </span><span class="s5">&quot;AC Power&quot;</span>
+        <span class="s1">psutil_result = psutil.sensors_battery()</span>
+        <span class="s1">self.assertEqual(psutil_result.power_plugged</span><span class="s3">, </span><span class="s1">power_plugged)</span>
+        <span class="s1">self.assertEqual(psutil_result.percent</span><span class="s3">, </span><span class="s1">int(percent))</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s5">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

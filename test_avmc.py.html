@@ -1,0 +1,62 @@
+<html>
+<head>
+<title>test_avmc.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_avmc.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">unittest</span>
+
+<span class="s0">from </span><span class="s1">comtypes.client </span><span class="s0">import </span><span class="s1">CreateObject</span>
+<span class="s0">from </span><span class="s1">comtypes.test.find_memleak </span><span class="s0">import </span><span class="s1">find_memleak</span>
+
+
+<span class="s1">@unittest.skip(</span><span class="s2">&quot;This test does not work.  Apparently it's supposed to work with the 'avmc' stuff &quot;</span>
+               <span class="s2">&quot;in comtypes/source, but it doesn't.  It's not clear to me why.&quot;</span><span class="s1">)</span>
+<span class="s0">class </span><span class="s1">Test(unittest.TestCase):</span>
+    <span class="s3">&quot;&quot;&quot;Test COM records&quot;&quot;&quot;</span>
+    <span class="s0">def </span><span class="s1">test(self):</span>
+        <span class="s4"># The ATL COM dll</span>
+        <span class="s1">avmc = CreateObject(</span><span class="s2">&quot;AvmcIfc.Avmc.1&quot;</span><span class="s1">)</span>
+
+        <span class="s4"># This returns an array (a list) of DeviceInfo records.</span>
+        <span class="s1">devs = avmc.FindAllAvmc()</span>
+
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">0</span><span class="s1">].Flags</span><span class="s0">, </span><span class="s5">12</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">0</span><span class="s1">].ID</span><span class="s0">, </span><span class="s5">13</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">0</span><span class="s1">].LocId</span><span class="s0">, </span><span class="s5">14</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">0</span><span class="s1">].Description</span><span class="s0">, </span><span class="s2">&quot;Avmc&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">0</span><span class="s1">].SerialNumber</span><span class="s0">, </span><span class="s2">&quot;1234&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">1</span><span class="s1">].Flags</span><span class="s0">, </span><span class="s5">22</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">1</span><span class="s1">].ID</span><span class="s0">, </span><span class="s5">23</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">1</span><span class="s1">].LocId</span><span class="s0">, </span><span class="s5">24</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">1</span><span class="s1">].Description</span><span class="s0">, </span><span class="s2">&quot;Avmc2&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(devs[</span><span class="s5">1</span><span class="s1">].SerialNumber</span><span class="s0">, </span><span class="s2">&quot;5678&quot;</span><span class="s1">)</span>
+
+<span class="s4">##        # Leaks... where?</span>
+<span class="s4">##        def doit():</span>
+<span class="s4">##            avmc.FindAllAvmc()</span>
+<span class="s4">##        self.check_leaks(doit)</span>
+
+    <span class="s0">def </span><span class="s1">check_leaks(self</span><span class="s0">, </span><span class="s1">func</span><span class="s0">, </span><span class="s1">limit=</span><span class="s5">0</span><span class="s1">):</span>
+        <span class="s1">bytes = find_memleak(func)</span>
+        <span class="s1">self.assertFalse(bytes &gt; limit</span><span class="s0">, </span><span class="s2">&quot;Leaks %d bytes&quot; </span><span class="s1">% bytes)</span>
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s2">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>

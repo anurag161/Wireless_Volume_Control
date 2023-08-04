@@ -1,0 +1,463 @@
+<html>
+<head>
+<title>test_testutils.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #cc7832;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+test_testutils.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python3</span>
+<span class="s0"># -*- coding: utf-8 -*-</span>
+
+<span class="s0"># Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.</span>
+<span class="s0"># Use of this source code is governed by a BSD-style license that can be</span>
+<span class="s0"># found in the LICENSE file.</span>
+
+<span class="s2">&quot;&quot;&quot; 
+Tests for testing utils (psutil.tests namespace). 
+&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">collections</span>
+<span class="s3">import </span><span class="s1">contextlib</span>
+<span class="s3">import </span><span class="s1">errno</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">socket</span>
+<span class="s3">import </span><span class="s1">stat</span>
+<span class="s3">import </span><span class="s1">subprocess</span>
+<span class="s3">import </span><span class="s1">unittest</span>
+
+<span class="s3">import </span><span class="s1">psutil</span>
+<span class="s3">import </span><span class="s1">psutil.tests</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">FREEBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">NETBSD</span>
+<span class="s3">from </span><span class="s1">psutil </span><span class="s3">import </span><span class="s1">POSIX</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">open_binary</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">open_text</span>
+<span class="s3">from </span><span class="s1">psutil._common </span><span class="s3">import </span><span class="s1">supports_ipv6</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">CI_TESTING</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">HAS_CONNECTIONS_UNIX</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PYTHON_EXE</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">PsutilTestCase</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">TestMemoryLeak</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">bind_socket</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">bind_unix_socket</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">call_until</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">chdir</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">create_sockets</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">get_free_port</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">is_namedtuple</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">mock</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">process_namespace</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">reap_children</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">retry_on_failure</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_mkdir</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">safe_rmpath</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">serialrun</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">system_namespace</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">tcp_socketpair</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">terminate</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">unix_socketpair</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">wait_for_file</span>
+<span class="s3">from </span><span class="s1">psutil.tests </span><span class="s3">import </span><span class="s1">wait_for_pid</span>
+
+
+<span class="s0"># ===================================================================</span>
+<span class="s0"># --- Unit tests for test utilities.</span>
+<span class="s0"># ===================================================================</span>
+
+
+<span class="s3">class </span><span class="s1">TestRetryDecorator(PsutilTestCase):</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_retry_success(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+        <span class="s0"># Fail 3 times out of 5; make sure the decorated fun returns.</span>
+
+        <span class="s1">@retry(retries=</span><span class="s5">5</span><span class="s3">, </span><span class="s1">interval=</span><span class="s5">1</span><span class="s3">, </span><span class="s1">logfun=</span><span class="s3">None</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">foo():</span>
+            <span class="s3">while </span><span class="s1">queue:</span>
+                <span class="s1">queue.pop()</span>
+                <span class="s5">1 </span><span class="s1">/ </span><span class="s5">0</span>
+            <span class="s3">return </span><span class="s5">1</span>
+
+        <span class="s1">queue = list(range(</span><span class="s5">3</span><span class="s1">))</span>
+        <span class="s1">self.assertEqual(foo()</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(sleep.call_count</span><span class="s3">, </span><span class="s5">3</span><span class="s1">)</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_retry_failure(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+        <span class="s0"># Fail 6 times out of 5; th function is supposed to raise exc.</span>
+        <span class="s1">@retry(retries=</span><span class="s5">5</span><span class="s3">, </span><span class="s1">interval=</span><span class="s5">1</span><span class="s3">, </span><span class="s1">logfun=</span><span class="s3">None</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">foo():</span>
+            <span class="s3">while </span><span class="s1">queue:</span>
+                <span class="s1">queue.pop()</span>
+                <span class="s5">1 </span><span class="s1">/ </span><span class="s5">0</span>
+            <span class="s3">return </span><span class="s5">1</span>
+
+        <span class="s1">queue = list(range(</span><span class="s5">6</span><span class="s1">))</span>
+        <span class="s1">self.assertRaises(ZeroDivisionError</span><span class="s3">, </span><span class="s1">foo)</span>
+        <span class="s1">self.assertEqual(sleep.call_count</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_exception_arg(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+        <span class="s1">@retry(exception=ValueError</span><span class="s3">, </span><span class="s1">interval=</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">foo():</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span>
+
+        <span class="s1">self.assertRaises(TypeError</span><span class="s3">, </span><span class="s1">foo)</span>
+        <span class="s1">self.assertEqual(sleep.call_count</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_no_interval_arg(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+        <span class="s0"># if interval is not specified sleep is not supposed to be called</span>
+
+        <span class="s1">@retry(retries=</span><span class="s5">5</span><span class="s3">, </span><span class="s1">interval=</span><span class="s3">None, </span><span class="s1">logfun=</span><span class="s3">None</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">foo():</span>
+            <span class="s5">1 </span><span class="s1">/ </span><span class="s5">0</span>
+
+        <span class="s1">self.assertRaises(ZeroDivisionError</span><span class="s3">, </span><span class="s1">foo)</span>
+        <span class="s1">self.assertEqual(sleep.call_count</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_retries_arg(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+
+        <span class="s1">@retry(retries=</span><span class="s5">5</span><span class="s3">, </span><span class="s1">interval=</span><span class="s5">1</span><span class="s3">, </span><span class="s1">logfun=</span><span class="s3">None</span><span class="s1">)</span>
+        <span class="s3">def </span><span class="s1">foo():</span>
+            <span class="s5">1 </span><span class="s1">/ </span><span class="s5">0</span>
+
+        <span class="s1">self.assertRaises(ZeroDivisionError</span><span class="s3">, </span><span class="s1">foo)</span>
+        <span class="s1">self.assertEqual(sleep.call_count</span><span class="s3">, </span><span class="s5">5</span><span class="s1">)</span>
+
+    <span class="s1">@mock.patch(</span><span class="s4">'time.sleep'</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_retries_and_timeout_args(self</span><span class="s3">, </span><span class="s1">sleep):</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">retry</span><span class="s3">, </span><span class="s1">retries=</span><span class="s5">5</span><span class="s3">, </span><span class="s1">timeout=</span><span class="s5">1</span><span class="s1">)</span>
+
+
+<span class="s3">class </span><span class="s1">TestSyncTestUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_wait_for_pid(self):</span>
+        <span class="s1">wait_for_pid(os.getpid())</span>
+        <span class="s1">nopid = max(psutil.pids()) + </span><span class="s5">99999</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.tests.retry.__iter__'</span><span class="s3">, </span><span class="s1">return_value=iter([</span><span class="s5">0</span><span class="s1">])):</span>
+            <span class="s1">self.assertRaises(psutil.NoSuchProcess</span><span class="s3">, </span><span class="s1">wait_for_pid</span><span class="s3">, </span><span class="s1">nopid)</span>
+
+    <span class="s3">def </span><span class="s1">test_wait_for_file(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">open(testfn</span><span class="s3">, </span><span class="s4">'w'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s1">f.write(</span><span class="s4">'foo'</span><span class="s1">)</span>
+        <span class="s1">wait_for_file(testfn)</span>
+        <span class="s3">assert not </span><span class="s1">os.path.exists(testfn)</span>
+
+    <span class="s3">def </span><span class="s1">test_wait_for_file_empty(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">open(testfn</span><span class="s3">, </span><span class="s4">'w'</span><span class="s1">):</span>
+            <span class="s3">pass</span>
+        <span class="s1">wait_for_file(testfn</span><span class="s3">, </span><span class="s1">empty=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">assert not </span><span class="s1">os.path.exists(testfn)</span>
+
+    <span class="s3">def </span><span class="s1">test_wait_for_file_no_file(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.tests.retry.__iter__'</span><span class="s3">, </span><span class="s1">return_value=iter([</span><span class="s5">0</span><span class="s1">])):</span>
+            <span class="s1">self.assertRaises(IOError</span><span class="s3">, </span><span class="s1">wait_for_file</span><span class="s3">, </span><span class="s1">testfn)</span>
+
+    <span class="s3">def </span><span class="s1">test_wait_for_file_no_delete(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s3">with </span><span class="s1">open(testfn</span><span class="s3">, </span><span class="s4">'w'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s1">f.write(</span><span class="s4">'foo'</span><span class="s1">)</span>
+        <span class="s1">wait_for_file(testfn</span><span class="s3">, </span><span class="s1">delete=</span><span class="s3">False</span><span class="s1">)</span>
+        <span class="s3">assert </span><span class="s1">os.path.exists(testfn)</span>
+
+    <span class="s3">def </span><span class="s1">test_call_until(self):</span>
+        <span class="s1">ret = call_until(</span><span class="s3">lambda</span><span class="s1">: </span><span class="s5">1</span><span class="s3">, </span><span class="s4">&quot;ret == 1&quot;</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(ret</span><span class="s3">, </span><span class="s5">1</span><span class="s1">)</span>
+
+
+<span class="s3">class </span><span class="s1">TestFSTestUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_open_text(self):</span>
+        <span class="s3">with </span><span class="s1">open_text(__file__) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s1">self.assertEqual(f.mode</span><span class="s3">, </span><span class="s4">'rt'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_open_binary(self):</span>
+        <span class="s3">with </span><span class="s1">open_binary(__file__) </span><span class="s3">as </span><span class="s1">f:</span>
+            <span class="s1">self.assertEqual(f.mode</span><span class="s3">, </span><span class="s4">'rb'</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_safe_mkdir(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s1">safe_mkdir(testfn)</span>
+        <span class="s3">assert </span><span class="s1">os.path.isdir(testfn)</span>
+        <span class="s1">safe_mkdir(testfn)</span>
+        <span class="s3">assert </span><span class="s1">os.path.isdir(testfn)</span>
+
+    <span class="s3">def </span><span class="s1">test_safe_rmpath(self):</span>
+        <span class="s0"># test file is removed</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s1">open(testfn</span><span class="s3">, </span><span class="s4">'w'</span><span class="s1">).close()</span>
+        <span class="s1">safe_rmpath(testfn)</span>
+        <span class="s3">assert not </span><span class="s1">os.path.exists(testfn)</span>
+        <span class="s0"># test no exception if path does not exist</span>
+        <span class="s1">safe_rmpath(testfn)</span>
+        <span class="s0"># test dir is removed</span>
+        <span class="s1">os.mkdir(testfn)</span>
+        <span class="s1">safe_rmpath(testfn)</span>
+        <span class="s3">assert not </span><span class="s1">os.path.exists(testfn)</span>
+        <span class="s0"># test other exceptions are raised</span>
+        <span class="s3">with </span><span class="s1">mock.patch(</span><span class="s4">'psutil.tests.os.stat'</span><span class="s3">,</span>
+                        <span class="s1">side_effect=OSError(errno.EINVAL</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s1">)) </span><span class="s3">as </span><span class="s1">m:</span>
+            <span class="s3">with </span><span class="s1">self.assertRaises(OSError):</span>
+                <span class="s1">safe_rmpath(testfn)</span>
+            <span class="s3">assert </span><span class="s1">m.called</span>
+
+    <span class="s3">def </span><span class="s1">test_chdir(self):</span>
+        <span class="s1">testfn = self.get_testfn()</span>
+        <span class="s1">base = os.getcwd()</span>
+        <span class="s1">os.mkdir(testfn)</span>
+        <span class="s3">with </span><span class="s1">chdir(testfn):</span>
+            <span class="s1">self.assertEqual(os.getcwd()</span><span class="s3">, </span><span class="s1">os.path.join(base</span><span class="s3">, </span><span class="s1">testfn))</span>
+        <span class="s1">self.assertEqual(os.getcwd()</span><span class="s3">, </span><span class="s1">base)</span>
+
+
+<span class="s3">class </span><span class="s1">TestProcessUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_reap_children(self):</span>
+        <span class="s1">subp = self.spawn_testproc()</span>
+        <span class="s1">p = psutil.Process(subp.pid)</span>
+        <span class="s3">assert </span><span class="s1">p.is_running()</span>
+        <span class="s1">reap_children()</span>
+        <span class="s3">assert not </span><span class="s1">p.is_running()</span>
+        <span class="s3">assert not </span><span class="s1">psutil.tests._pids_started</span>
+        <span class="s3">assert not </span><span class="s1">psutil.tests._subprocesses_started</span>
+
+    <span class="s3">def </span><span class="s1">test_spawn_children_pair(self):</span>
+        <span class="s1">child</span><span class="s3">, </span><span class="s1">grandchild = self.spawn_children_pair()</span>
+        <span class="s1">self.assertNotEqual(child.pid</span><span class="s3">, </span><span class="s1">grandchild.pid)</span>
+        <span class="s3">assert </span><span class="s1">child.is_running()</span>
+        <span class="s3">assert </span><span class="s1">grandchild.is_running()</span>
+        <span class="s1">children = psutil.Process().children()</span>
+        <span class="s1">self.assertEqual(children</span><span class="s3">, </span><span class="s1">[child])</span>
+        <span class="s1">children = psutil.Process().children(recursive=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(len(children)</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+        <span class="s1">self.assertIn(child</span><span class="s3">, </span><span class="s1">children)</span>
+        <span class="s1">self.assertIn(grandchild</span><span class="s3">, </span><span class="s1">children)</span>
+        <span class="s1">self.assertEqual(child.ppid()</span><span class="s3">, </span><span class="s1">os.getpid())</span>
+        <span class="s1">self.assertEqual(grandchild.ppid()</span><span class="s3">, </span><span class="s1">child.pid)</span>
+
+        <span class="s1">terminate(child)</span>
+        <span class="s3">assert not </span><span class="s1">child.is_running()</span>
+        <span class="s3">assert </span><span class="s1">grandchild.is_running()</span>
+
+        <span class="s1">terminate(grandchild)</span>
+        <span class="s3">assert not </span><span class="s1">grandchild.is_running()</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">&quot;POSIX only&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_spawn_zombie(self):</span>
+        <span class="s1">parent</span><span class="s3">, </span><span class="s1">zombie = self.spawn_zombie()</span>
+        <span class="s1">self.assertEqual(zombie.status()</span><span class="s3">, </span><span class="s1">psutil.STATUS_ZOMBIE)</span>
+
+    <span class="s3">def </span><span class="s1">test_terminate(self):</span>
+        <span class="s0"># by subprocess.Popen</span>
+        <span class="s1">p = self.spawn_testproc()</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s1">self.assertProcessGone(p)</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s0"># by psutil.Process</span>
+        <span class="s1">p = psutil.Process(self.spawn_testproc().pid)</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s1">self.assertProcessGone(p)</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s0"># by psutil.Popen</span>
+        <span class="s1">cmd = [PYTHON_EXE</span><span class="s3">, </span><span class="s4">&quot;-c&quot;</span><span class="s3">, </span><span class="s4">&quot;import time; time.sleep(60);&quot;</span><span class="s1">]</span>
+        <span class="s1">p = psutil.Popen(cmd</span><span class="s3">, </span><span class="s1">stdout=subprocess.PIPE</span><span class="s3">, </span><span class="s1">stderr=subprocess.PIPE)</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s1">self.assertProcessGone(p)</span>
+        <span class="s1">terminate(p)</span>
+        <span class="s0"># by PID</span>
+        <span class="s1">pid = self.spawn_testproc().pid</span>
+        <span class="s1">terminate(pid)</span>
+        <span class="s1">self.assertProcessGone(p)</span>
+        <span class="s1">terminate(pid)</span>
+        <span class="s0"># zombie</span>
+        <span class="s3">if </span><span class="s1">POSIX:</span>
+            <span class="s1">parent</span><span class="s3">, </span><span class="s1">zombie = self.spawn_zombie()</span>
+            <span class="s1">terminate(parent)</span>
+            <span class="s1">terminate(zombie)</span>
+            <span class="s1">self.assertProcessGone(parent)</span>
+            <span class="s1">self.assertProcessGone(zombie)</span>
+
+
+<span class="s3">class </span><span class="s1">TestNetUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">bind_socket(self):</span>
+        <span class="s1">port = get_free_port()</span>
+        <span class="s3">with </span><span class="s1">contextlib.closing(bind_socket(addr=(</span><span class="s4">''</span><span class="s3">, </span><span class="s1">port))) </span><span class="s3">as </span><span class="s1">s:</span>
+            <span class="s1">self.assertEqual(s.getsockname()[</span><span class="s5">1</span><span class="s1">]</span><span class="s3">, </span><span class="s1">port)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">&quot;POSIX only&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_bind_unix_socket(self):</span>
+        <span class="s1">name = self.get_testfn()</span>
+        <span class="s1">sock = bind_unix_socket(name)</span>
+        <span class="s3">with </span><span class="s1">contextlib.closing(sock):</span>
+            <span class="s1">self.assertEqual(sock.family</span><span class="s3">, </span><span class="s1">socket.AF_UNIX)</span>
+            <span class="s1">self.assertEqual(sock.type</span><span class="s3">, </span><span class="s1">socket.SOCK_STREAM)</span>
+            <span class="s1">self.assertEqual(sock.getsockname()</span><span class="s3">, </span><span class="s1">name)</span>
+            <span class="s3">assert </span><span class="s1">os.path.exists(name)</span>
+            <span class="s3">assert </span><span class="s1">stat.S_ISSOCK(os.stat(name).st_mode)</span>
+        <span class="s0"># UDP</span>
+        <span class="s1">name = self.get_testfn()</span>
+        <span class="s1">sock = bind_unix_socket(name</span><span class="s3">, </span><span class="s1">type=socket.SOCK_DGRAM)</span>
+        <span class="s3">with </span><span class="s1">contextlib.closing(sock):</span>
+            <span class="s1">self.assertEqual(sock.type</span><span class="s3">, </span><span class="s1">socket.SOCK_DGRAM)</span>
+
+    <span class="s3">def </span><span class="s1">tcp_tcp_socketpair(self):</span>
+        <span class="s1">addr = (</span><span class="s4">&quot;127.0.0.1&quot;</span><span class="s3">, </span><span class="s1">get_free_port())</span>
+        <span class="s1">server</span><span class="s3">, </span><span class="s1">client = tcp_socketpair(socket.AF_INET</span><span class="s3">, </span><span class="s1">addr=addr)</span>
+        <span class="s3">with </span><span class="s1">contextlib.closing(server):</span>
+            <span class="s3">with </span><span class="s1">contextlib.closing(client):</span>
+                <span class="s0"># Ensure they are connected and the positions are</span>
+                <span class="s0"># correct.</span>
+                <span class="s1">self.assertEqual(server.getsockname()</span><span class="s3">, </span><span class="s1">addr)</span>
+                <span class="s1">self.assertEqual(client.getpeername()</span><span class="s3">, </span><span class="s1">addr)</span>
+                <span class="s1">self.assertNotEqual(client.getsockname()</span><span class="s3">, </span><span class="s1">addr)</span>
+
+    <span class="s1">@unittest.skipIf(</span><span class="s3">not </span><span class="s1">POSIX</span><span class="s3">, </span><span class="s4">&quot;POSIX only&quot;</span><span class="s1">)</span>
+    <span class="s1">@unittest.skipIf(NETBSD </span><span class="s3">or </span><span class="s1">FREEBSD</span><span class="s3">,</span>
+                     <span class="s4">&quot;/var/run/log UNIX socket opened by default&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_unix_socketpair(self):</span>
+        <span class="s1">p = psutil.Process()</span>
+        <span class="s1">num_fds = p.num_fds()</span>
+        <span class="s3">assert not </span><span class="s1">p.connections(kind=</span><span class="s4">'unix'</span><span class="s1">)</span>
+        <span class="s1">name = self.get_testfn()</span>
+        <span class="s1">server</span><span class="s3">, </span><span class="s1">client = unix_socketpair(name)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">assert </span><span class="s1">os.path.exists(name)</span>
+            <span class="s3">assert </span><span class="s1">stat.S_ISSOCK(os.stat(name).st_mode)</span>
+            <span class="s1">self.assertEqual(p.num_fds() - num_fds</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(len(p.connections(kind=</span><span class="s4">'unix'</span><span class="s1">))</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s1">self.assertEqual(server.getsockname()</span><span class="s3">, </span><span class="s1">name)</span>
+            <span class="s1">self.assertEqual(client.getpeername()</span><span class="s3">, </span><span class="s1">name)</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s1">client.close()</span>
+            <span class="s1">server.close()</span>
+
+    <span class="s3">def </span><span class="s1">test_create_sockets(self):</span>
+        <span class="s3">with </span><span class="s1">create_sockets() </span><span class="s3">as </span><span class="s1">socks:</span>
+            <span class="s1">fams = collections.defaultdict(int)</span>
+            <span class="s1">types = collections.defaultdict(int)</span>
+            <span class="s3">for </span><span class="s1">s </span><span class="s3">in </span><span class="s1">socks:</span>
+                <span class="s1">fams[s.family] += </span><span class="s5">1</span>
+                <span class="s0"># work around http://bugs.python.org/issue30204</span>
+                <span class="s1">types[s.getsockopt(socket.SOL_SOCKET</span><span class="s3">, </span><span class="s1">socket.SO_TYPE)] += </span><span class="s5">1</span>
+            <span class="s1">self.assertGreaterEqual(fams[socket.AF_INET]</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">supports_ipv6():</span>
+                <span class="s1">self.assertGreaterEqual(fams[socket.AF_INET6]</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">POSIX </span><span class="s3">and </span><span class="s1">HAS_CONNECTIONS_UNIX:</span>
+                <span class="s1">self.assertGreaterEqual(fams[socket.AF_UNIX]</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s1">self.assertGreaterEqual(types[socket.SOCK_STREAM]</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+            <span class="s1">self.assertGreaterEqual(types[socket.SOCK_DGRAM]</span><span class="s3">, </span><span class="s5">2</span><span class="s1">)</span>
+
+
+<span class="s1">@serialrun</span>
+<span class="s3">class </span><span class="s1">TestMemLeakClass(TestMemoryLeak):</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s3">def </span><span class="s1">test_times(self):</span>
+        <span class="s3">def </span><span class="s1">fun():</span>
+            <span class="s1">cnt[</span><span class="s4">'cnt'</span><span class="s1">] += </span><span class="s5">1</span>
+        <span class="s1">cnt = {</span><span class="s4">'cnt'</span><span class="s1">: </span><span class="s5">0</span><span class="s1">}</span>
+        <span class="s1">self.execute(fun</span><span class="s3">, </span><span class="s1">times=</span><span class="s5">10</span><span class="s3">, </span><span class="s1">warmup_times=</span><span class="s5">15</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(cnt[</span><span class="s4">'cnt'</span><span class="s1">]</span><span class="s3">, </span><span class="s5">26</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_param_err(self):</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">self.execute</span><span class="s3">, lambda</span><span class="s1">: </span><span class="s5">0</span><span class="s3">, </span><span class="s1">times=</span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">self.execute</span><span class="s3">, lambda</span><span class="s1">: </span><span class="s5">0</span><span class="s3">, </span><span class="s1">times=-</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">self.execute</span><span class="s3">, lambda</span><span class="s1">: </span><span class="s5">0</span><span class="s3">, </span><span class="s1">warmup_times=-</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">self.execute</span><span class="s3">, lambda</span><span class="s1">: </span><span class="s5">0</span><span class="s3">, </span><span class="s1">tolerance=-</span><span class="s5">1</span><span class="s1">)</span>
+        <span class="s1">self.assertRaises(ValueError</span><span class="s3">, </span><span class="s1">self.execute</span><span class="s3">, lambda</span><span class="s1">: </span><span class="s5">0</span><span class="s3">, </span><span class="s1">retries=-</span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s1">@retry_on_failure()</span>
+    <span class="s1">@unittest.skipIf(CI_TESTING</span><span class="s3">, </span><span class="s4">&quot;skipped on CI&quot;</span><span class="s1">)</span>
+    <span class="s3">def </span><span class="s1">test_leak_mem(self):</span>
+        <span class="s1">ls = []</span>
+
+        <span class="s3">def </span><span class="s1">fun(ls=ls):</span>
+            <span class="s1">ls.append(</span><span class="s4">&quot;x&quot; </span><span class="s1">* </span><span class="s5">24 </span><span class="s1">* </span><span class="s5">1024</span><span class="s1">)</span>
+
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s0"># will consume around 3M in total</span>
+            <span class="s1">self.assertRaisesRegex(AssertionError</span><span class="s3">, </span><span class="s4">&quot;extra-mem&quot;</span><span class="s3">,</span>
+                                   <span class="s1">self.execute</span><span class="s3">, </span><span class="s1">fun</span><span class="s3">, </span><span class="s1">times=</span><span class="s5">50</span><span class="s1">)</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s3">del </span><span class="s1">ls</span>
+
+    <span class="s3">def </span><span class="s1">test_unclosed_files(self):</span>
+        <span class="s3">def </span><span class="s1">fun():</span>
+            <span class="s1">f = open(__file__)</span>
+            <span class="s1">self.addCleanup(f.close)</span>
+            <span class="s1">box.append(f)</span>
+
+        <span class="s1">box = []</span>
+        <span class="s1">kind = </span><span class="s4">&quot;fd&quot; </span><span class="s3">if </span><span class="s1">POSIX </span><span class="s3">else </span><span class="s4">&quot;handle&quot;</span>
+        <span class="s1">self.assertRaisesRegex(AssertionError</span><span class="s3">, </span><span class="s4">&quot;unclosed &quot; </span><span class="s1">+ kind</span><span class="s3">,</span>
+                               <span class="s1">self.execute</span><span class="s3">, </span><span class="s1">fun)</span>
+
+    <span class="s3">def </span><span class="s1">test_tolerance(self):</span>
+        <span class="s3">def </span><span class="s1">fun():</span>
+            <span class="s1">ls.append(</span><span class="s4">&quot;x&quot; </span><span class="s1">* </span><span class="s5">24 </span><span class="s1">* </span><span class="s5">1024</span><span class="s1">)</span>
+        <span class="s1">ls = []</span>
+        <span class="s1">times = </span><span class="s5">100</span>
+        <span class="s1">self.execute(fun</span><span class="s3">, </span><span class="s1">times=times</span><span class="s3">, </span><span class="s1">warmup_times=</span><span class="s5">0</span><span class="s3">,</span>
+                     <span class="s1">tolerance=</span><span class="s5">200 </span><span class="s1">* </span><span class="s5">1024 </span><span class="s1">* </span><span class="s5">1024</span><span class="s1">)</span>
+        <span class="s1">self.assertEqual(len(ls)</span><span class="s3">, </span><span class="s1">times + </span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">test_execute_w_exc(self):</span>
+        <span class="s3">def </span><span class="s1">fun():</span>
+            <span class="s5">1 </span><span class="s1">/ </span><span class="s5">0</span>
+        <span class="s1">self.execute_w_exc(ZeroDivisionError</span><span class="s3">, </span><span class="s1">fun)</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(ZeroDivisionError):</span>
+            <span class="s1">self.execute_w_exc(OSError</span><span class="s3">, </span><span class="s1">fun)</span>
+
+        <span class="s3">def </span><span class="s1">fun():</span>
+            <span class="s3">pass</span>
+        <span class="s3">with </span><span class="s1">self.assertRaises(AssertionError):</span>
+            <span class="s1">self.execute_w_exc(ZeroDivisionError</span><span class="s3">, </span><span class="s1">fun)</span>
+
+
+<span class="s3">class </span><span class="s1">TestTestingUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_process_namespace(self):</span>
+        <span class="s1">p = psutil.Process()</span>
+        <span class="s1">ns = process_namespace(p)</span>
+        <span class="s1">ns.test()</span>
+        <span class="s1">fun = [x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">ns.iter(ns.getters) </span><span class="s3">if </span><span class="s1">x[</span><span class="s5">1</span><span class="s1">] == </span><span class="s4">'ppid'</span><span class="s1">][</span><span class="s5">0</span><span class="s1">][</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">self.assertEqual(fun()</span><span class="s3">, </span><span class="s1">p.ppid())</span>
+
+    <span class="s3">def </span><span class="s1">test_system_namespace(self):</span>
+        <span class="s1">ns = system_namespace()</span>
+        <span class="s1">fun = [x </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">ns.iter(ns.getters) </span><span class="s3">if </span><span class="s1">x[</span><span class="s5">1</span><span class="s1">] == </span><span class="s4">'net_if_addrs'</span><span class="s1">][</span><span class="s5">0</span><span class="s1">][</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">self.assertEqual(fun()</span><span class="s3">, </span><span class="s1">psutil.net_if_addrs())</span>
+
+
+<span class="s3">class </span><span class="s1">TestOtherUtils(PsutilTestCase):</span>
+
+    <span class="s3">def </span><span class="s1">test_is_namedtuple(self):</span>
+        <span class="s3">assert </span><span class="s1">is_namedtuple(collections.namedtuple(</span><span class="s4">'foo'</span><span class="s3">, </span><span class="s4">'a b c'</span><span class="s1">)(</span><span class="s5">1</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s5">3</span><span class="s1">))</span>
+        <span class="s3">assert not </span><span class="s1">is_namedtuple(tuple())</span>
+
+
+<span class="s3">if </span><span class="s1">__name__ == </span><span class="s4">'__main__'</span><span class="s1">:</span>
+    <span class="s3">from </span><span class="s1">psutil.tests.runner </span><span class="s3">import </span><span class="s1">run_from_name</span>
+    <span class="s1">run_from_name(__file__)</span>
+</pre>
+</body>
+</html>

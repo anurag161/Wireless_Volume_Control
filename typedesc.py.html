@@ -1,0 +1,159 @@
+<html>
+<head>
+<title>typedesc.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+typedesc.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># More type descriptions from parsed COM typelibaries, extending those</span>
+<span class="s0"># in typedesc_base</span>
+
+<span class="s2">import </span><span class="s1">ctypes</span>
+<span class="s2">from </span><span class="s1">comtypes.tools.typedesc_base </span><span class="s2">import </span><span class="s1">*</span>
+
+<span class="s2">class </span><span class="s1">TypeLib(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">guid</span><span class="s2">, </span><span class="s1">major</span><span class="s2">, </span><span class="s1">minor</span><span class="s2">, </span><span class="s1">doc=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.guid = guid</span>
+        <span class="s1">self.major = major</span>
+        <span class="s1">self.minor = minor</span>
+        <span class="s1">self.doc = doc</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s3">&quot;&lt;TypeLib(%s: %s, %s, %s)&gt;&quot; </span><span class="s1">% (self.name</span><span class="s2">, </span><span class="s1">self.guid</span><span class="s2">, </span><span class="s1">self.major</span><span class="s2">, </span><span class="s1">self.minor)</span>
+
+<span class="s2">class </span><span class="s1">Constant(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">value):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.value = value</span>
+
+<span class="s2">class </span><span class="s1">External(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">tlib</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">align</span><span class="s2">, </span><span class="s1">docs=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s0"># the type library containing the symbol</span>
+        <span class="s1">self.tlib = tlib</span>
+        <span class="s0"># name of symbol</span>
+        <span class="s1">self.symbol_name = name</span>
+        <span class="s1">self.size = size</span>
+        <span class="s1">self.align = align</span>
+        <span class="s0"># type lib description</span>
+        <span class="s1">self.docs = docs</span>
+
+    <span class="s2">def </span><span class="s1">get_head(self):</span>
+        <span class="s0"># codegen might call this</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+<span class="s2">class </span><span class="s1">SAFEARRAYType(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">typ):</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.align = self.size = ctypes.sizeof(ctypes.c_void_p) * </span><span class="s4">8</span>
+
+<span class="s2">class </span><span class="s1">ComMethod(object):</span>
+    <span class="s0"># custom COM method, parsed from typelib</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">invkind</span><span class="s2">, </span><span class="s1">memid</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">returns</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">doc):</span>
+        <span class="s1">self.invkind = invkind</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.returns = returns</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.memid = memid</span>
+        <span class="s1">self.doc = doc</span>
+        <span class="s1">self.arguments = []</span>
+
+    <span class="s2">def </span><span class="s1">add_argument(self</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">default):</span>
+        <span class="s1">self.arguments.append((typ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">default))</span>
+
+<span class="s2">class </span><span class="s1">DispMethod(object):</span>
+    <span class="s0"># dispatchable COM method, parsed from typelib</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">dispid</span><span class="s2">, </span><span class="s1">invkind</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">returns</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">doc):</span>
+        <span class="s1">self.dispid = dispid</span>
+        <span class="s1">self.invkind = invkind</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.returns = returns</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.doc = doc</span>
+        <span class="s1">self.arguments = []</span>
+
+    <span class="s2">def </span><span class="s1">add_argument(self</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">default):</span>
+        <span class="s1">self.arguments.append((typ</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">default))</span>
+
+<span class="s2">class </span><span class="s1">DispProperty(object):</span>
+    <span class="s0"># dispatchable COM property, parsed from typelib</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">dispid</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">doc):</span>
+        <span class="s1">self.dispid = dispid</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.doc = doc</span>
+
+<span class="s2">class </span><span class="s1">DispInterfaceHead(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">itf):</span>
+        <span class="s1">self.itf = itf</span>
+
+<span class="s2">class </span><span class="s1">DispInterfaceBody(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">itf):</span>
+        <span class="s1">self.itf = itf</span>
+
+<span class="s2">class </span><span class="s1">DispInterface(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">members</span><span class="s2">, </span><span class="s1">base</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">idlflags):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.members = members</span>
+        <span class="s1">self.base = base</span>
+        <span class="s1">self.iid = iid</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.itf_head = DispInterfaceHead(self)</span>
+        <span class="s1">self.itf_body = DispInterfaceBody(self)</span>
+
+    <span class="s2">def </span><span class="s1">get_body(self):</span>
+        <span class="s2">return </span><span class="s1">self.itf_body</span>
+
+    <span class="s2">def </span><span class="s1">get_head(self):</span>
+        <span class="s2">return </span><span class="s1">self.itf_head</span>
+
+<span class="s2">class </span><span class="s1">ComInterfaceHead(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">itf):</span>
+        <span class="s1">self.itf = itf</span>
+
+<span class="s2">class </span><span class="s1">ComInterfaceBody(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">itf):</span>
+        <span class="s1">self.itf = itf</span>
+
+<span class="s2">class </span><span class="s1">ComInterface(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">members</span><span class="s2">, </span><span class="s1">base</span><span class="s2">, </span><span class="s1">iid</span><span class="s2">, </span><span class="s1">idlflags):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.members = members</span>
+        <span class="s1">self.base = base</span>
+        <span class="s1">self.iid = iid</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.itf_head = ComInterfaceHead(self)</span>
+        <span class="s1">self.itf_body = ComInterfaceBody(self)</span>
+
+    <span class="s2">def </span><span class="s1">get_body(self):</span>
+        <span class="s2">return </span><span class="s1">self.itf_body</span>
+
+    <span class="s2">def </span><span class="s1">get_head(self):</span>
+        <span class="s2">return </span><span class="s1">self.itf_head</span>
+
+<span class="s2">class </span><span class="s1">CoClass(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">clsid</span><span class="s2">, </span><span class="s1">idlflags</span><span class="s2">, </span><span class="s1">tlibattr):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.clsid = clsid</span>
+        <span class="s1">self.idlflags = idlflags</span>
+        <span class="s1">self.tlibattr = tlibattr</span>
+        <span class="s1">self.interfaces = []</span>
+
+    <span class="s2">def </span><span class="s1">add_interface(self</span><span class="s2">, </span><span class="s1">itf</span><span class="s2">, </span><span class="s1">idlflags):</span>
+        <span class="s1">self.interfaces.append((itf</span><span class="s2">, </span><span class="s1">idlflags))</span>
+</pre>
+</body>
+</html>

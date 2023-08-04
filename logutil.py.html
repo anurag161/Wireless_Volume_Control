@@ -1,0 +1,71 @@
+<html>
+<head>
+<title>logutil.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+logutil.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># logutil.py</span>
+<span class="s2">import </span><span class="s1">logging</span><span class="s2">, </span><span class="s1">ctypes</span>
+
+<span class="s2">class </span><span class="s1">NTDebugHandler(logging.Handler):</span>
+    <span class="s2">def </span><span class="s1">emit(self</span><span class="s2">, </span><span class="s1">record</span><span class="s2">,</span>
+             <span class="s1">writeA=ctypes.windll.kernel32.OutputDebugStringA</span><span class="s2">,</span>
+             <span class="s1">writeW=ctypes.windll.kernel32.OutputDebugStringW):</span>
+        <span class="s1">text = self.format(record)</span>
+        <span class="s2">if </span><span class="s1">isinstance(text</span><span class="s2">, </span><span class="s1">str):</span>
+            <span class="s1">writeA(text + </span><span class="s3">&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">writeW(text + </span><span class="s3">u&quot;</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">)</span>
+<span class="s1">logging.NTDebugHandler = NTDebugHandler</span>
+
+<span class="s2">def </span><span class="s1">setup_logging(*pathnames):</span>
+    <span class="s2">import </span><span class="s1">configparser</span>
+
+    <span class="s1">parser = configparser.ConfigParser()</span>
+    <span class="s1">parser.optionxform = str </span><span class="s0"># use case sensitive option names!</span>
+
+    <span class="s1">parser.read(pathnames)</span>
+
+    <span class="s1">DEFAULTS = {</span><span class="s3">&quot;handler&quot;</span><span class="s1">: </span><span class="s3">&quot;StreamHandler()&quot;</span><span class="s2">,</span>
+                <span class="s3">&quot;format&quot;</span><span class="s1">: </span><span class="s3">&quot;%(levelname)s:%(name)s:%(message)s&quot;</span><span class="s2">,</span>
+                <span class="s3">&quot;level&quot;</span><span class="s1">: </span><span class="s3">&quot;WARNING&quot;</span><span class="s1">}</span>
+
+    <span class="s2">def </span><span class="s1">get(section</span><span class="s2">, </span><span class="s1">option):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">parser.get(section</span><span class="s2">, </span><span class="s1">option</span><span class="s2">, True</span><span class="s1">)</span>
+        <span class="s2">except </span><span class="s1">(configparser.NoOptionError</span><span class="s2">, </span><span class="s1">configparser.NoSectionError):</span>
+            <span class="s2">return </span><span class="s1">DEFAULTS[option]</span>
+
+    <span class="s1">levelname = get(</span><span class="s3">&quot;logging&quot;</span><span class="s2">, </span><span class="s3">&quot;level&quot;</span><span class="s1">)</span>
+    <span class="s1">format = get(</span><span class="s3">&quot;logging&quot;</span><span class="s2">, </span><span class="s3">&quot;format&quot;</span><span class="s1">)</span>
+    <span class="s1">handlerclass = get(</span><span class="s3">&quot;logging&quot;</span><span class="s2">, </span><span class="s3">&quot;handler&quot;</span><span class="s1">)</span>
+
+    <span class="s0"># convert level name to level value</span>
+    <span class="s1">level = getattr(logging</span><span class="s2">, </span><span class="s1">levelname)</span>
+    <span class="s0"># create the handler instance</span>
+    <span class="s1">handler = eval(handlerclass</span><span class="s2">, </span><span class="s1">vars(logging))</span>
+    <span class="s1">formatter = logging.Formatter(format)</span>
+    <span class="s1">handler.setFormatter(formatter)</span>
+    <span class="s1">logging.root.addHandler(handler)</span>
+    <span class="s1">logging.root.setLevel(level)</span>
+
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">parser.items(</span><span class="s3">&quot;logging.levels&quot;</span><span class="s2">, True</span><span class="s1">):</span>
+            <span class="s1">value = getattr(logging</span><span class="s2">, </span><span class="s1">value)</span>
+            <span class="s1">logging.getLogger(name).setLevel(value)</span>
+    <span class="s2">except </span><span class="s1">configparser.NoSectionError:</span>
+        <span class="s2">pass</span>
+</pre>
+</body>
+</html>

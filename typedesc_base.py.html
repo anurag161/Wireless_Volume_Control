@@ -1,0 +1,224 @@
+<html>
+<head>
+<title>typedesc_base.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+typedesc_base.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># typedesc.py - classes representing C type descriptions</span>
+
+<span class="s2">class </span><span class="s1">Argument(object):</span>
+    <span class="s3">&quot;a Parameter in the argument list of a callable (Function, Method, ...)&quot;</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">atype</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">self.atype = atype</span>
+        <span class="s1">self.name = name</span>
+
+<span class="s2">class </span><span class="s1">_HasArgs(object):</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.arguments = []</span>
+
+    <span class="s2">def </span><span class="s1">add_argument(self</span><span class="s2">, </span><span class="s1">arg):</span>
+        <span class="s2">assert </span><span class="s1">isinstance(arg</span><span class="s2">, </span><span class="s1">Argument)</span>
+        <span class="s1">self.arguments.append(arg)</span>
+
+    <span class="s2">def </span><span class="s1">iterArgTypes(self):</span>
+        <span class="s2">for </span><span class="s1">a </span><span class="s2">in </span><span class="s1">self.arguments:</span>
+            <span class="s2">yield </span><span class="s1">a.atype</span>
+
+    <span class="s2">def </span><span class="s1">iterArgNames(self):</span>
+        <span class="s2">for </span><span class="s1">a </span><span class="s2">in </span><span class="s1">self.arguments:</span>
+            <span class="s2">yield </span><span class="s1">a.name</span>
+
+    <span class="s2">def </span><span class="s1">fixup_argtypes(self</span><span class="s2">, </span><span class="s1">typemap):</span>
+        <span class="s2">for </span><span class="s1">a </span><span class="s2">in </span><span class="s1">self.arguments:</span>
+            <span class="s1">a.atype = typemap[a.atype]</span>
+
+
+<span class="s0">################</span>
+
+<span class="s2">class </span><span class="s1">Alias(object):</span>
+    <span class="s0"># a C preprocessor alias, like #define A B</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">typ=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.alias = alias</span>
+        <span class="s1">self.typ = typ</span>
+
+<span class="s2">class </span><span class="s1">Macro(object):</span>
+    <span class="s0"># a C preprocessor definition with arguments</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">body):</span>
+        <span class="s0"># all arguments are strings, args is the literal argument list</span>
+        <span class="s0"># *with* the parens around it:</span>
+        <span class="s0"># Example: Macro(&quot;CD_INDRIVE&quot;, &quot;(status)&quot;, &quot;((int)status &gt; 0)&quot;)</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.args = args</span>
+        <span class="s1">self.body = body</span>
+
+<span class="s2">class </span><span class="s1">File(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">self.name = name</span>
+
+<span class="s2">class </span><span class="s1">Function(_HasArgs):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">returns</span><span class="s2">, </span><span class="s1">attributes</span><span class="s2">, </span><span class="s1">extern):</span>
+        <span class="s1">_HasArgs.__init__(self)</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.returns = returns</span>
+        <span class="s1">self.attributes = attributes </span><span class="s0"># dllimport, __stdcall__, __cdecl__</span>
+        <span class="s1">self.extern = extern</span>
+
+<span class="s2">class </span><span class="s1">Constructor(_HasArgs):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name):</span>
+        <span class="s1">_HasArgs.__init__(self)</span>
+        <span class="s1">self.name = name</span>
+
+<span class="s2">class </span><span class="s1">OperatorFunction(_HasArgs):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">returns):</span>
+        <span class="s1">_HasArgs.__init__(self)</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.returns = returns</span>
+
+<span class="s2">class </span><span class="s1">FunctionType(_HasArgs):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">returns</span><span class="s2">, </span><span class="s1">attributes):</span>
+        <span class="s1">_HasArgs.__init__(self)</span>
+        <span class="s1">self.returns = returns</span>
+        <span class="s1">self.attributes = attributes</span>
+
+<span class="s2">class </span><span class="s1">Method(_HasArgs):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">returns):</span>
+        <span class="s1">_HasArgs.__init__(self)</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.returns = returns</span>
+
+<span class="s2">class </span><span class="s1">FundamentalType(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">align):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s2">if </span><span class="s1">name != </span><span class="s4">&quot;void&quot;</span><span class="s1">:</span>
+            <span class="s1">self.size = int(size)</span>
+            <span class="s1">self.align = int(align)</span>
+
+<span class="s2">class </span><span class="s1">PointerType(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">align):</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.size = int(size)</span>
+        <span class="s1">self.align = int(align)</span>
+
+<span class="s2">class </span><span class="s1">Typedef(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">typ):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.typ = typ</span>
+
+<span class="s2">class </span><span class="s1">ArrayType(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">min</span><span class="s2">, </span><span class="s1">max):</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.min = min</span>
+        <span class="s1">self.max = max</span>
+
+<span class="s2">class </span><span class="s1">StructureHead(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">struct):</span>
+        <span class="s1">self.struct = struct</span>
+
+<span class="s2">class </span><span class="s1">StructureBody(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">struct):</span>
+        <span class="s1">self.struct = struct</span>
+
+<span class="s2">class </span><span class="s1">_Struct_Union_Base(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self):</span>
+        <span class="s1">self.struct_body = StructureBody(self)</span>
+        <span class="s1">self.struct_head = StructureHead(self)</span>
+
+    <span class="s2">def </span><span class="s1">get_body(self):</span>
+        <span class="s2">return </span><span class="s1">self.struct_body</span>
+
+    <span class="s2">def </span><span class="s1">get_head(self):</span>
+        <span class="s2">return </span><span class="s1">self.struct_head</span>
+
+<span class="s2">class </span><span class="s1">Structure(_Struct_Union_Base):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">align</span><span class="s2">, </span><span class="s1">members</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">artificial=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.align = int(align)</span>
+        <span class="s1">self.members = members</span>
+        <span class="s1">self.bases = bases</span>
+        <span class="s1">self.artificial = artificial</span>
+        <span class="s2">if </span><span class="s1">size </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">self.size = int(size)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">self.size = </span><span class="s2">None</span>
+        <span class="s1">super(Structure</span><span class="s2">, </span><span class="s1">self).__init__()</span>
+
+<span class="s2">class </span><span class="s1">Union(_Struct_Union_Base):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">align</span><span class="s2">, </span><span class="s1">members</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">artificial=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.align = int(align)</span>
+        <span class="s1">self.members = members</span>
+        <span class="s1">self.bases = bases</span>
+        <span class="s1">self.artificial = artificial</span>
+        <span class="s2">if </span><span class="s1">size </span><span class="s2">is not None</span><span class="s1">:</span>
+            <span class="s1">self.size = int(size)</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s1">self.size = </span><span class="s2">None</span>
+        <span class="s1">super(Union</span><span class="s2">, </span><span class="s1">self).__init__()</span>
+
+<span class="s2">class </span><span class="s1">Field(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">bits</span><span class="s2">, </span><span class="s1">offset):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.bits = bits</span>
+        <span class="s1">self.offset = int(offset)</span>
+
+<span class="s2">class </span><span class="s1">CvQualifiedType(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">const</span><span class="s2">, </span><span class="s1">volatile):</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.const = const</span>
+        <span class="s1">self.volatile = volatile</span>
+
+<span class="s2">class </span><span class="s1">Enumeration(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">size</span><span class="s2">, </span><span class="s1">align):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.size = int(size)</span>
+        <span class="s1">self.align = int(align)</span>
+        <span class="s1">self.values = []</span>
+
+    <span class="s2">def </span><span class="s1">add_value(self</span><span class="s2">, </span><span class="s1">v):</span>
+        <span class="s1">self.values.append(v)</span>
+
+<span class="s2">class </span><span class="s1">EnumValue(object):</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">enumeration):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.value = value</span>
+        <span class="s1">self.enumeration = enumeration</span>
+
+<span class="s2">class </span><span class="s1">Variable(object):</span>
+    <span class="s1">location = </span><span class="s2">None</span>
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">typ</span><span class="s2">, </span><span class="s1">init=</span><span class="s2">None</span><span class="s1">):</span>
+        <span class="s1">self.name = name</span>
+        <span class="s1">self.typ = typ</span>
+        <span class="s1">self.init = init</span>
+
+<span class="s0">################################################################</span>
+</pre>
+</body>
+</html>

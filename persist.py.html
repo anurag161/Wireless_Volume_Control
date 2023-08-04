@@ -1,0 +1,234 @@
+<html>
+<head>
+<title>persist.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+persist.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;This module defines the following interfaces: 
+ 
+  IErrorLog 
+  IPropertyBag 
+  IPersistPropertyBag 
+  IPropertyBag2 
+  IPersistPropertyBag2 
+ 
+The 'DictPropertyBag' class is a class implementing the IPropertyBag 
+interface, useful in client code. 
+&quot;&quot;&quot;</span>
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">*</span>
+<span class="s2">from </span><span class="s1">ctypes.wintypes </span><span class="s2">import </span><span class="s1">WORD</span><span class="s2">, </span><span class="s1">DWORD</span><span class="s2">, </span><span class="s1">BOOL</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">GUID</span><span class="s2">, </span><span class="s1">IUnknown</span><span class="s2">, </span><span class="s1">COMMETHOD</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s1">dispid</span>
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">IPersist</span>
+<span class="s2">from </span><span class="s1">comtypes.automation </span><span class="s2">import </span><span class="s1">VARIANT</span><span class="s2">, </span><span class="s1">tagEXCEPINFO</span>
+
+<span class="s3"># XXX Replace by canonical solution!!!</span>
+<span class="s1">WSTRING = c_wchar_p</span>
+
+<span class="s2">class </span><span class="s1">IErrorLog(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{3127CA40-446E-11CE-8135-00AA004BB851}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'AddError'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">WSTRING</span><span class="s2">, </span><span class="s4">'pszPropName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagEXCEPINFO)</span><span class="s2">, </span><span class="s4">'pExcepInfo' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IPropertyBag(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{55272A00-42CB-11CE-8135-00AA004BB851}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s3"># XXX Note: According to MSDN, pVar and pErrorLog are ['in', 'out'] parameters.</span>
+        <span class="s3">#</span>
+        <span class="s3"># XXX ctypes does NOT yet accept POINTER(IErrorLog) as 'out' parameter:</span>
+        <span class="s3"># TypeError: 'out' parameter 3 must be a pointer type, not POINTER(IErrorLog)</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Read'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">WSTRING</span><span class="s2">, </span><span class="s4">'pszPropName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s2">, </span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(VARIANT)</span><span class="s2">, </span><span class="s4">'pVar' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IErrorLog)</span><span class="s2">, </span><span class="s4">'pErrorLog' </span><span class="s1">))</span><span class="s2">,</span>
+<span class="s3">##                  ( ['in', 'out'], POINTER(IErrorLog), 'pErrorLog' )),</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Write'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">WSTRING</span><span class="s2">, </span><span class="s4">'pszPropName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(VARIANT)</span><span class="s2">, </span><span class="s4">'pVar' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IPersistPropertyBag(IPersist):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{37D84F60-42CB-11CE-8135-00AA004BB851}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'InitNew'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Load'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IPropertyBag)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IErrorLog)</span><span class="s2">, </span><span class="s4">'pErrorLog' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Save'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IPropertyBag)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s4">'fClearDirty' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s4">'fSaveAllProperties' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+
+<span class="s1">CLIPFORMAT = WORD</span>
+
+<span class="s1">PROPBAG2_TYPE_UNDEFINED = </span><span class="s5">0</span>
+<span class="s1">PROPBAG2_TYPE_DATA = </span><span class="s5">1</span>
+<span class="s1">PROPBAG2_TYPE_URL = </span><span class="s5">2</span>
+<span class="s1">PROPBAG2_TYPE_OBJECT = </span><span class="s5">3</span>
+<span class="s1">PROPBAG2_TYPE_STREAM = </span><span class="s5">4</span>
+<span class="s1">PROPBAG2_TYPE_STORAGE = </span><span class="s5">5</span>
+<span class="s1">PROPBAG2_TYPE_MONIKER = </span><span class="s5">6</span>
+
+<span class="s2">class </span><span class="s1">tagPROPBAG2(Structure):</span>
+    <span class="s1">_fields_ = [</span>
+        <span class="s1">(</span><span class="s4">'dwType'</span><span class="s2">, </span><span class="s1">c_ulong)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'vt'</span><span class="s2">, </span><span class="s1">c_ushort)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'cfType'</span><span class="s2">, </span><span class="s1">CLIPFORMAT)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'dwHint'</span><span class="s2">, </span><span class="s1">c_ulong)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'pstrName'</span><span class="s2">, </span><span class="s1">WSTRING)</span><span class="s2">,</span>
+        <span class="s1">(</span><span class="s4">'clsid'</span><span class="s2">, </span><span class="s1">GUID)</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IPropertyBag2(IUnknown):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{22F55882-280B-11D0-A8A9-00A0C90C2004}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Read'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s4">'cProperties' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagPROPBAG2)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IErrorLog)</span><span class="s2">, </span><span class="s4">'pErrLog' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(VARIANT)</span><span class="s2">, </span><span class="s4">'pvarValue' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(HRESULT)</span><span class="s2">, </span><span class="s4">'phrError' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Write'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s4">'cProperties' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagPROPBAG2)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(VARIANT)</span><span class="s2">, </span><span class="s4">'pvarValue' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'CountProperties'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s4">'pcProperties' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'GetPropertyInfo'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s4">'iProperty' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s4">'cProperties' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(tagPROPBAG2)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(c_ulong)</span><span class="s2">, </span><span class="s4">'pcProperties' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'LoadObject'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">WSTRING</span><span class="s2">, </span><span class="s4">'pstrName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_ulong</span><span class="s2">, </span><span class="s4">'dwHint' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IUnknown)</span><span class="s2">, </span><span class="s4">'punkObject' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IErrorLog)</span><span class="s2">, </span><span class="s4">'pErrLog' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+<span class="s2">class </span><span class="s1">IPersistPropertyBag2(IPersist):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{22F55881-280B-11D0-A8A9-00A0C90C2004}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'InitNew'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Load'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IPropertyBag2)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IErrorLog)</span><span class="s2">, </span><span class="s4">'pErrLog' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Save'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(IPropertyBag2)</span><span class="s2">, </span><span class="s4">'pPropBag' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s4">'fClearDirty' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s4">'fSaveAllProperties' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'IsDirty'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">]</span>
+
+
+<span class="s3"># STGM constants</span>
+<span class="s3"># Access</span>
+<span class="s1">STGM_READ = </span><span class="s5">0x00000000</span>
+<span class="s1">STGM_WRITE = </span><span class="s5">0x00000001</span>
+<span class="s1">STGM_READWRITE = </span><span class="s5">0x00000002</span>
+
+<span class="s3"># Sharing</span>
+<span class="s1">STGM_SHARE_EXCLUSIVE = </span><span class="s5">0x00000010</span>
+<span class="s1">STGM_SHARE_DENY_WRITE = </span><span class="s5">0x00000020</span>
+<span class="s1">STGM_SHARE_DENY_READ = </span><span class="s5">0x00000030</span>
+<span class="s1">STGM_SHARE_DENY_NONE = </span><span class="s5">0x00000040</span>
+<span class="s1">STGM_PRIORITY = </span><span class="s5">0x00040000</span>
+
+<span class="s3"># Creation</span>
+<span class="s1">STGM_FAILIFTHERE = </span><span class="s5">0x00000000</span>
+<span class="s1">STGM_CREATE = </span><span class="s5">0x00001000</span>
+<span class="s1">STGM_CONVERT = </span><span class="s5">0x00020000</span>
+
+<span class="s3"># Transactioning</span>
+<span class="s1">STGM_DIRECT = </span><span class="s5">0x00000000</span>
+<span class="s1">STGM_TRANSACTED = </span><span class="s5">0x00010000</span>
+
+<span class="s3"># Transactioning Performance</span>
+<span class="s1">STGM_NOSCRATCH = </span><span class="s5">0x00100000</span>
+<span class="s1">STGM_NOSNAPSHOT = </span><span class="s5">0x00200000</span>
+
+<span class="s3"># Direct SWMR and Simple</span>
+<span class="s1">STGM_SIMPLE = </span><span class="s5">0x08000000</span>
+<span class="s1">STGM_DIRECT_SWMR = </span><span class="s5">0x00400000</span>
+
+<span class="s3"># Delete on release</span>
+<span class="s1">STGM_DELETEONRELEASE = </span><span class="s5">0x04000000</span>
+
+<span class="s1">LPOLESTR = LPCOLESTR = c_wchar_p</span>
+
+<span class="s2">class </span><span class="s1">IPersistFile(IPersist):</span>
+    <span class="s1">_iid_ = GUID(</span><span class="s4">'{0000010B-0000-0000-C000-000000000046}'</span><span class="s1">)</span>
+    <span class="s1">_idlflags_ = []</span>
+    <span class="s1">_methods_ = [</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'IsDirty'</span><span class="s1">)</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Load'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">LPCOLESTR</span><span class="s2">, </span><span class="s4">'pszFileName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">DWORD</span><span class="s2">, </span><span class="s4">'dwMode' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'Save'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">LPCOLESTR</span><span class="s2">, </span><span class="s4">'pszFileName' </span><span class="s1">)</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">BOOL</span><span class="s2">, </span><span class="s4">'fRemember' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'SaveCompleted'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'in'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">LPCOLESTR</span><span class="s2">, </span><span class="s4">'pszFileName' </span><span class="s1">))</span><span class="s2">,</span>
+        <span class="s1">COMMETHOD([]</span><span class="s2">, </span><span class="s1">HRESULT</span><span class="s2">, </span><span class="s4">'GetCurFile'</span><span class="s2">,</span>
+                  <span class="s1">( [</span><span class="s4">'out'</span><span class="s1">]</span><span class="s2">, </span><span class="s1">POINTER(LPOLESTR)</span><span class="s2">, </span><span class="s4">'ppszFileName' </span><span class="s1">))</span>
+        <span class="s1">]</span>
+
+
+<span class="s2">from </span><span class="s1">comtypes </span><span class="s2">import </span><span class="s1">COMObject</span>
+<span class="s2">from </span><span class="s1">comtypes.hresult </span><span class="s2">import </span><span class="s1">*</span>
+<span class="s2">class </span><span class="s1">DictPropertyBag(COMObject):</span>
+    <span class="s0">&quot;&quot;&quot;An object implementing the IProperty interface on a dictionary. 
+ 
+    Pass named values in the constructor for the client to Read(), or 
+    retrieve from the .values instance variable after the client has 
+    called Load(). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">_com_interfaces_ = [IPropertyBag]</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">**kw):</span>
+        <span class="s1">super(DictPropertyBag</span><span class="s2">, </span><span class="s1">self).__init__()</span>
+        <span class="s1">self.values = kw</span>
+
+    <span class="s2">def </span><span class="s1">Read(self</span><span class="s2">, </span><span class="s1">this</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">pVar</span><span class="s2">, </span><span class="s1">errorlog):</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">val = self.values[name]</span>
+        <span class="s2">except </span><span class="s1">KeyError:</span>
+            <span class="s2">return </span><span class="s1">E_INVALIDARG</span>
+        <span class="s3"># The caller did provide info about the type that is expected</span>
+        <span class="s3"># with the pVar[0].vt typecode, except when this is VT_EMPTY.</span>
+        <span class="s1">var = pVar[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">typecode = var.vt</span>
+        <span class="s1">var.value = val</span>
+        <span class="s2">if </span><span class="s1">typecode:</span>
+            <span class="s1">var.ChangeType(typecode)</span>
+        <span class="s2">return </span><span class="s1">S_OK</span>
+
+    <span class="s2">def </span><span class="s1">Write(self</span><span class="s2">, </span><span class="s1">this</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">var):</span>
+        <span class="s1">val = var[</span><span class="s5">0</span><span class="s1">].value</span>
+        <span class="s1">self.values[name] = val</span>
+        <span class="s2">return </span><span class="s1">S_OK</span>
+</pre>
+</body>
+</html>

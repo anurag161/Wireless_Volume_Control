@@ -1,0 +1,308 @@
+<html>
+<head>
+<title>_events.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_events.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">print_function</span>
+<span class="s0">import </span><span class="s1">ctypes</span>
+<span class="s0">import </span><span class="s1">traceback</span>
+<span class="s0">import </span><span class="s1">comtypes</span>
+<span class="s0">import </span><span class="s1">comtypes.hresult</span>
+<span class="s0">import </span><span class="s1">comtypes.automation</span>
+<span class="s0">import </span><span class="s1">comtypes.typeinfo</span>
+<span class="s0">import </span><span class="s1">comtypes.connectionpoints</span>
+<span class="s0">from </span><span class="s1">comtypes.client._generate </span><span class="s0">import </span><span class="s1">GetModule</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s1">logger = logging.getLogger(__name__)</span>
+
+<span class="s0">class </span><span class="s1">_AdviseConnection(object):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">receiver):</span>
+        <span class="s1">self.cp = </span><span class="s0">None</span>
+        <span class="s1">self.cookie = </span><span class="s0">None</span>
+        <span class="s1">self.receiver = </span><span class="s0">None</span>
+        <span class="s1">self._connect(source</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">receiver)</span>
+
+    <span class="s0">def </span><span class="s1">_connect(self</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">receiver):</span>
+        <span class="s1">cpc = source.QueryInterface(comtypes.connectionpoints.IConnectionPointContainer)</span>
+        <span class="s1">self.cp = cpc.FindConnectionPoint(ctypes.byref(interface._iid_))</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;Start advise %s&quot;</span><span class="s0">, </span><span class="s1">interface)</span>
+        <span class="s1">self.cookie = self.cp.Advise(receiver)</span>
+        <span class="s1">self.receiver = receiver</span>
+
+    <span class="s0">def </span><span class="s1">disconnect(self):</span>
+        <span class="s0">if </span><span class="s1">self.cookie:</span>
+            <span class="s1">self.cp.Unadvise(self.cookie)</span>
+            <span class="s1">logger.debug(</span><span class="s2">&quot;Unadvised %s&quot;</span><span class="s0">, </span><span class="s1">self.cp)</span>
+            <span class="s1">self.cp = </span><span class="s0">None</span>
+            <span class="s1">self.cookie = </span><span class="s0">None</span>
+            <span class="s0">del </span><span class="s1">self.receiver</span>
+
+    <span class="s0">def </span><span class="s1">__del__(self):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">self.cookie </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">self.cp.Unadvise(self.cookie)</span>
+        <span class="s0">except </span><span class="s1">(comtypes.COMError</span><span class="s0">, </span><span class="s1">WindowsError):</span>
+            <span class="s3"># Are we sure we want to ignore errors here?</span>
+            <span class="s0">pass</span>
+
+<span class="s0">def </span><span class="s1">FindOutgoingInterface(source):</span>
+    <span class="s4">&quot;&quot;&quot;XXX Describe the strategy that is used...&quot;&quot;&quot;</span>
+    <span class="s3"># If the COM object implements IProvideClassInfo2, it is easy to</span>
+    <span class="s3"># find the default outgoing interface.</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">pci = source.QueryInterface(comtypes.typeinfo.IProvideClassInfo2)</span>
+        <span class="s1">guid = pci.GetGUID(</span><span class="s5">1</span><span class="s1">)</span>
+    <span class="s0">except </span><span class="s1">comtypes.COMError:</span>
+        <span class="s0">pass</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s3"># another try: block needed?</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">interface = comtypes.com_interface_registry[str(guid)]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s1">tinfo = pci.GetClassInfo()</span>
+            <span class="s1">tlib</span><span class="s0">, </span><span class="s1">index = tinfo.GetContainingTypeLib()</span>
+            <span class="s1">GetModule(tlib)</span>
+            <span class="s1">interface = comtypes.com_interface_registry[str(guid)]</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;%s using sinkinterface %s&quot;</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">interface)</span>
+        <span class="s0">return </span><span class="s1">interface</span>
+
+    <span class="s3"># If we can find the CLSID of the COM object, we can look for a</span>
+    <span class="s3"># registered outgoing interface (__clsid has been set by</span>
+    <span class="s3"># comtypes.client):</span>
+    <span class="s1">clsid = source.__dict__.get(</span><span class="s2">'__clsid'</span><span class="s1">)</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">interface = comtypes.com_coclass_registry[clsid]._outgoing_interfaces_[</span><span class="s5">0</span><span class="s1">]</span>
+    <span class="s0">except </span><span class="s1">KeyError:</span>
+        <span class="s0">pass</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;%s using sinkinterface from clsid %s&quot;</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">interface)</span>
+        <span class="s0">return </span><span class="s1">interface</span>
+
+<span class="s3">##    interface = find_single_connection_interface(source)</span>
+<span class="s3">##    if interface:</span>
+<span class="s3">##        return interface</span>
+
+    <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;cannot determine source interface&quot;</span><span class="s1">)</span>
+
+<span class="s0">def </span><span class="s1">find_single_connection_interface(source):</span>
+    <span class="s3"># Enumerate the connection interfaces.  If we find a single one,</span>
+    <span class="s3"># return it, if there are more, we give up since we cannot</span>
+    <span class="s3"># determine which one to use.</span>
+    <span class="s1">cpc = source.QueryInterface(comtypes.connectionpoints.IConnectionPointContainer)</span>
+    <span class="s1">enum = cpc.EnumConnectionPoints()</span>
+    <span class="s1">iid = enum.next().GetConnectionInterface()</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">next(enum)</span>
+    <span class="s0">except </span><span class="s1">StopIteration:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">interface = comtypes.com_interface_registry[str(iid)]</span>
+        <span class="s0">except </span><span class="s1">KeyError:</span>
+            <span class="s0">return None</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">logger.debug(</span><span class="s2">&quot;%s using sinkinterface from iid %s&quot;</span><span class="s0">, </span><span class="s1">source</span><span class="s0">, </span><span class="s1">interface)</span>
+            <span class="s0">return </span><span class="s1">interface</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">logger.debug(</span><span class="s2">&quot;%s has more than one connection point&quot;</span><span class="s0">, </span><span class="s1">source)</span>
+
+    <span class="s0">return None</span>
+
+<span class="s0">def </span><span class="s1">report_errors(func):</span>
+    <span class="s3"># This decorator preserves parts of the decorated function</span>
+    <span class="s3"># signature, so that the comtypes special-casing for the 'this'</span>
+    <span class="s3"># parameter still works.</span>
+    <span class="s0">if </span><span class="s1">func.__code__.co_varnames[:</span><span class="s5">2</span><span class="s1">] == (</span><span class="s2">'self'</span><span class="s0">, </span><span class="s2">'this'</span><span class="s1">):</span>
+        <span class="s0">def </span><span class="s1">error_printer(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">return </span><span class="s1">func(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s1">traceback.print_exc()</span>
+                <span class="s0">raise</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">def </span><span class="s1">error_printer(*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">return </span><span class="s1">func(*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+            <span class="s0">except</span><span class="s1">:</span>
+                <span class="s1">traceback.print_exc()</span>
+                <span class="s0">raise</span>
+    <span class="s0">return </span><span class="s1">error_printer</span>
+
+<span class="s0">from </span><span class="s1">comtypes._comobject </span><span class="s0">import </span><span class="s1">_MethodFinder</span>
+<span class="s0">class </span><span class="s1">_SinkMethodFinder(_MethodFinder):</span>
+    <span class="s4">&quot;&quot;&quot;Special MethodFinder, for finding and decorating event handler 
+    methods.  Looks for methods on two objects. Also decorates the 
+    event handlers with 'report_errors' which will print exceptions in 
+    event handlers. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">inst</span><span class="s0">, </span><span class="s1">sink):</span>
+        <span class="s1">super(_SinkMethodFinder</span><span class="s0">, </span><span class="s1">self).__init__(inst)</span>
+        <span class="s1">self.sink = sink</span>
+
+    <span class="s0">def </span><span class="s1">find_method(self</span><span class="s0">, </span><span class="s1">fq_name</span><span class="s0">, </span><span class="s1">mthname):</span>
+        <span class="s1">impl = self._find_method(fq_name</span><span class="s0">, </span><span class="s1">mthname)</span>
+        <span class="s3"># Caller of this method catches AttributeError,</span>
+        <span class="s3"># so we need to be careful in the following code</span>
+        <span class="s3"># not to raise one...</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s3"># impl is a bound method, dissect it...</span>
+            <span class="s1">im_self</span><span class="s0">, </span><span class="s1">im_func = impl.__self__</span><span class="s0">, </span><span class="s1">impl.__func__</span>
+            <span class="s3"># decorate it with an error printer...</span>
+            <span class="s1">method = report_errors(im_func)</span>
+            <span class="s3"># and make a new bound method from it again.</span>
+            <span class="s0">return </span><span class="s1">comtypes.instancemethod(method</span><span class="s0">,</span>
+                                           <span class="s1">im_self</span><span class="s0">,</span>
+                                           <span class="s1">type(im_self))</span>
+        <span class="s0">except </span><span class="s1">AttributeError </span><span class="s0">as </span><span class="s1">details:</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError(details)</span>
+
+    <span class="s0">def </span><span class="s1">_find_method(self</span><span class="s0">, </span><span class="s1">fq_name</span><span class="s0">, </span><span class="s1">mthname):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">super(_SinkMethodFinder</span><span class="s0">, </span><span class="s1">self).find_method(fq_name</span><span class="s0">, </span><span class="s1">mthname)</span>
+        <span class="s0">except </span><span class="s1">AttributeError:</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">return </span><span class="s1">getattr(self.sink</span><span class="s0">, </span><span class="s1">fq_name)</span>
+            <span class="s0">except </span><span class="s1">AttributeError:</span>
+                <span class="s0">return </span><span class="s1">getattr(self.sink</span><span class="s0">, </span><span class="s1">mthname)</span>
+
+<span class="s0">def </span><span class="s1">CreateEventReceiver(interface</span><span class="s0">, </span><span class="s1">handler):</span>
+
+    <span class="s0">class </span><span class="s1">Sink(comtypes.COMObject):</span>
+        <span class="s1">_com_interfaces_ = [interface]</span>
+
+        <span class="s0">def </span><span class="s1">_get_method_finder_(self</span><span class="s0">, </span><span class="s1">itf):</span>
+            <span class="s3"># Use a special MethodFinder that will first try 'self',</span>
+            <span class="s3"># then the sink.</span>
+            <span class="s0">return </span><span class="s1">_SinkMethodFinder(self</span><span class="s0">, </span><span class="s1">handler)</span>
+
+    <span class="s1">sink = Sink()</span>
+
+    <span class="s3"># Since our Sink object doesn't have typeinfo, it needs a</span>
+    <span class="s3"># _dispimpl_ dictionary to dispatch events received via Invoke.</span>
+    <span class="s0">if </span><span class="s1">issubclass(interface</span><span class="s0">, </span><span class="s1">comtypes.automation.IDispatch) \</span>
+           <span class="s0">and not </span><span class="s1">hasattr(sink</span><span class="s0">, </span><span class="s2">&quot;_dispimpl_&quot;</span><span class="s1">):</span>
+        <span class="s1">finder = sink._get_method_finder_(interface)</span>
+        <span class="s1">dispimpl = sink._dispimpl_ = {}</span>
+        <span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">interface._methods_:</span>
+            <span class="s1">restype</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">argtypes</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags</span><span class="s0">, </span><span class="s1">helptext = m</span>
+            <span class="s3"># Can dispid be at a different index? Should check code generator...</span>
+            <span class="s3"># ...but hand-written code should also work...</span>
+            <span class="s1">dispid = idlflags[</span><span class="s5">0</span><span class="s1">]</span>
+            <span class="s1">impl = finder.get_impl(interface</span><span class="s0">, </span><span class="s1">mthname</span><span class="s0">, </span><span class="s1">paramflags</span><span class="s0">, </span><span class="s1">idlflags)</span>
+            <span class="s3"># XXX Wouldn't work for 'propget', 'propput', 'propputref'</span>
+            <span class="s3"># methods - are they allowed on event interfaces?</span>
+            <span class="s1">dispimpl[(dispid</span><span class="s0">, </span><span class="s1">comtypes.automation.DISPATCH_METHOD)] = impl</span>
+
+    <span class="s0">return </span><span class="s1">sink</span>
+
+<span class="s0">def </span><span class="s1">GetEvents(source</span><span class="s0">, </span><span class="s1">sink</span><span class="s0">, </span><span class="s1">interface=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s4">&quot;&quot;&quot;Receive COM events from 'source'.  Events will call methods on 
+    the 'sink' object.  'interface' is the source interface to use. 
+    &quot;&quot;&quot;</span>
+    <span class="s3"># When called from CreateObject, the sourceinterface has already</span>
+    <span class="s3"># been determined by the coclass.  Otherwise, the only thing that</span>
+    <span class="s3"># makes sense is to use IProvideClassInfo2 to get the default</span>
+    <span class="s3"># source interface.</span>
+    <span class="s0">if </span><span class="s1">interface </span><span class="s0">is None</span><span class="s1">:</span>
+        <span class="s1">interface = FindOutgoingInterface(source)</span>
+
+    <span class="s1">rcv = CreateEventReceiver(interface</span><span class="s0">, </span><span class="s1">sink)</span>
+    <span class="s0">return </span><span class="s1">_AdviseConnection(source</span><span class="s0">, </span><span class="s1">interface</span><span class="s0">, </span><span class="s1">rcv)</span>
+
+<span class="s0">class </span><span class="s1">EventDumper(object):</span>
+    <span class="s4">&quot;&quot;&quot;Universal sink for COM events.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__getattr__(self</span><span class="s0">, </span><span class="s1">name):</span>
+        <span class="s4">&quot;Create event handler methods on demand&quot;</span>
+        <span class="s0">if </span><span class="s1">name.startswith(</span><span class="s2">&quot;__&quot;</span><span class="s1">) </span><span class="s0">and </span><span class="s1">name.endswith(</span><span class="s2">&quot;__&quot;</span><span class="s1">):</span>
+            <span class="s0">raise </span><span class="s1">AttributeError(name)</span>
+        <span class="s1">print(</span><span class="s2">&quot;# event found:&quot;</span><span class="s0">, </span><span class="s1">name)</span>
+        <span class="s0">def </span><span class="s1">handler(self</span><span class="s0">, </span><span class="s1">this</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+            <span class="s3"># XXX handler is called with 'this'.  Should we really print &quot;None&quot; instead?</span>
+            <span class="s1">args = (</span><span class="s0">None,</span><span class="s1">) + args</span>
+            <span class="s1">print(</span><span class="s2">&quot;Event %s(%s)&quot; </span><span class="s1">% (name</span><span class="s0">, </span><span class="s2">&quot;, &quot;</span><span class="s1">.join([repr(a) </span><span class="s0">for </span><span class="s1">a </span><span class="s0">in </span><span class="s1">args])))</span>
+        <span class="s0">return </span><span class="s1">comtypes.instancemethod(handler</span><span class="s0">, </span><span class="s1">self</span><span class="s0">, </span><span class="s1">EventDumper)</span>
+
+<span class="s0">def </span><span class="s1">ShowEvents(source</span><span class="s0">, </span><span class="s1">interface=</span><span class="s0">None</span><span class="s1">):</span>
+    <span class="s4">&quot;&quot;&quot;Receive COM events from 'source'.  A special event sink will be 
+    used that first prints the names of events that are found in the 
+    outgoing interface, and will also print out the events when they 
+    are fired. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">comtypes.client.GetEvents(source</span><span class="s0">, </span><span class="s1">sink=EventDumper()</span><span class="s0">, </span><span class="s1">interface=interface)</span>
+
+<span class="s3"># This type is used inside 'PumpEvents', but if we create the type</span>
+<span class="s3"># afresh each time 'PumpEvents' is called we end up creating cyclic</span>
+<span class="s3"># garbage for each call.  So we define it here instead.</span>
+<span class="s1">_handles_type = ctypes.c_void_p * </span><span class="s5">1</span>
+
+<span class="s0">def </span><span class="s1">PumpEvents(timeout):</span>
+    <span class="s4">&quot;&quot;&quot;This following code waits for 'timeout' seconds in the way 
+    required for COM, internally doing the correct things depending 
+    on the COM appartment of the current thread.  It is possible to 
+    terminate the message loop by pressing CTRL+C, which will raise 
+    a KeyboardInterrupt. 
+    &quot;&quot;&quot;</span>
+    <span class="s3"># XXX Should there be a way to pass additional event handles which</span>
+    <span class="s3"># can terminate this function?</span>
+
+    <span class="s3"># XXX XXX XXX</span>
+    <span class="s3">#</span>
+    <span class="s3"># It may be that I misunderstood the CoWaitForMultipleHandles</span>
+    <span class="s3"># function.  Is a message loop required in a STA?  Seems so...</span>
+    <span class="s3">#</span>
+    <span class="s3"># MSDN says:</span>
+    <span class="s3">#</span>
+    <span class="s3"># If the caller resides in a single-thread apartment,</span>
+    <span class="s3"># CoWaitForMultipleHandles enters the COM modal loop, and the</span>
+    <span class="s3"># thread's message loop will continue to dispatch messages using</span>
+    <span class="s3"># the thread's message filter. If no message filter is registered</span>
+    <span class="s3"># for the thread, the default COM message processing is used.</span>
+    <span class="s3">#</span>
+    <span class="s3"># If the calling thread resides in a multithread apartment (MTA),</span>
+    <span class="s3"># CoWaitForMultipleHandles calls the Win32 function</span>
+    <span class="s3"># MsgWaitForMultipleObjects.</span>
+
+    <span class="s1">hevt = ctypes.windll.kernel32.CreateEventA(</span><span class="s0">None, True, False, None</span><span class="s1">)</span>
+    <span class="s1">handles = _handles_type(hevt)</span>
+    <span class="s1">RPC_S_CALLPENDING = -</span><span class="s5">2147417835</span>
+
+<span class="s3">##    @ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint)</span>
+    <span class="s0">def </span><span class="s1">HandlerRoutine(dwCtrlType):</span>
+        <span class="s0">if </span><span class="s1">dwCtrlType == </span><span class="s5">0</span><span class="s1">: </span><span class="s3"># CTRL+C</span>
+            <span class="s1">ctypes.windll.kernel32.SetEvent(hevt)</span>
+            <span class="s0">return </span><span class="s5">1</span>
+        <span class="s0">return </span><span class="s5">0</span>
+    <span class="s1">HandlerRoutine = ctypes.WINFUNCTYPE(ctypes.c_int</span><span class="s0">, </span><span class="s1">ctypes.c_uint)(HandlerRoutine)</span>
+
+    <span class="s1">ctypes.windll.kernel32.SetConsoleCtrlHandler(HandlerRoutine</span><span class="s0">, </span><span class="s5">1</span><span class="s1">)</span>
+
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">res = ctypes.oledll.ole32.CoWaitForMultipleHandles(</span><span class="s5">0</span><span class="s0">,</span>
+                                                               <span class="s1">int(timeout * </span><span class="s5">1000</span><span class="s1">)</span><span class="s0">,</span>
+                                                               <span class="s1">len(handles)</span><span class="s0">, </span><span class="s1">handles</span><span class="s0">,</span>
+                                                               <span class="s1">ctypes.byref(ctypes.c_ulong()))</span>
+        <span class="s0">except </span><span class="s1">WindowsError </span><span class="s0">as </span><span class="s1">details:</span>
+            <span class="s0">if </span><span class="s1">details.winerror != RPC_S_CALLPENDING: </span><span class="s3"># timeout expired</span>
+                <span class="s0">raise</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">KeyboardInterrupt</span>
+    <span class="s0">finally</span><span class="s1">:</span>
+        <span class="s1">ctypes.windll.kernel32.CloseHandle(hevt)</span>
+        <span class="s1">ctypes.windll.kernel32.SetConsoleCtrlHandler(HandlerRoutine</span><span class="s0">, </span><span class="s5">0</span><span class="s1">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<html>
+<head>
+<title>TestDispServer.idl</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #cc7832;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+TestDispServer.idl</font>
+</center></td></tr></table>
+<pre><span class="s0">/* 
+  2882fa40-2d69-4880-8073-e81fa29e1785 
+  7ae4b0e3-5d92-4ab1-b5d0-2a95c1c3ba73 
+  f557bf87-3e3f-4c73-9bc1-7d633d83714b 
+*/</span>
+
+<span class="s1">import </span><span class="s2">&quot;oaidl.idl&quot;</span><span class="s1">;</span>
+<span class="s1">import </span><span class="s2">&quot;ocidl.idl&quot;</span><span class="s1">;</span>
+
+<span class="s1">[</span>
+	<span class="s1">uuid(</span><span class="s3">3</span><span class="s1">b3b2a10-7fef-4bcc-90fe-43a221162b1b),</span>
+	<span class="s1">helpstring(</span><span class="s2">&quot;A custom event interface&quot;</span><span class="s1">)</span>
+	<span class="s1">]</span>
+<span class="s1">dispinterface DTestDispServerEvents {</span>
+  <span class="s1">properties:</span>
+
+  <span class="s1">methods:</span>
+	<span class="s1">[id(</span><span class="s3">10</span><span class="s1">)]</span>
+	<span class="s4">void </span><span class="s1">EvalStarted([</span><span class="s4">in</span><span class="s1">] BSTR what);</span>
+
+	<span class="s1">[id(</span><span class="s3">11</span><span class="s1">)]</span>
+	<span class="s4">void </span><span class="s1">EvalCompleted([</span><span class="s4">in</span><span class="s1">] BSTR what, [</span><span class="s4">in</span><span class="s1">] VARIANT result);</span>
+<span class="s1">};</span>
+
+<span class="s1">[</span>
+	<span class="s1">uuid(d44d11ba-aa1f-4e93-8f5a-8fa0a4715241),</span>
+	<span class="s1">helpstring(</span><span class="s2">&quot;DTestDispServer interface&quot;</span><span class="s1">)</span>
+	<span class="s1">]</span>
+<span class="s1">dispinterface DTestDispServer {</span>
+  <span class="s1">properties:</span>
+	<span class="s1">[</span><span class="s4">readonly</span><span class="s1">, id(</span><span class="s3">10</span><span class="s1">), helpstring(</span><span class="s2">&quot;the id of the server&quot;</span><span class="s1">)]</span>
+		<span class="s1">UINT id;</span>
+
+	<span class="s1">[id(</span><span class="s3">11</span><span class="s1">), helpstring(</span><span class="s2">&quot;the name of the server&quot;</span><span class="s1">)]</span>
+		<span class="s1">BSTR name;</span>
+
+  <span class="s1">methods:</span>
+
+	<span class="s1">[id(</span><span class="s3">12</span><span class="s1">), helpstring(</span><span class="s2">&quot;a method that receives an BSTR [in] parameter&quot;</span><span class="s1">)]</span>
+		<span class="s4">void </span><span class="s1">SetName([</span><span class="s4">in</span><span class="s1">] BSTR name);</span>
+
+	<span class="s1">[id(</span><span class="s3">13</span><span class="s1">), helpstring(</span><span class="s2">&quot;evaluate an expression and return the result&quot;</span><span class="s1">)]</span>
+		<span class="s1">VARIANT eval([</span><span class="s4">in</span><span class="s1">] BSTR what);</span>
+
+	<span class="s1">[id(</span><span class="s3">14</span><span class="s1">), helpstring(</span><span class="s2">&quot;evaluate an expression and return the result&quot;</span><span class="s1">)]</span>
+		<span class="s1">VARIANT eval2([</span><span class="s4">in</span><span class="s1">] BSTR what);</span>
+
+	<span class="s1">[id(</span><span class="s3">16</span><span class="s1">), helpstring(</span><span class="s2">&quot;execute a statement&quot;</span><span class="s1">)]</span>
+		<span class="s4">void </span><span class="s1">Exec([</span><span class="s4">in</span><span class="s1">] BSTR what);</span>
+
+	<span class="s1">[id(</span><span class="s3">17</span><span class="s1">), helpstring(</span><span class="s2">&quot;execute a statement&quot;</span><span class="s1">)]</span>
+		<span class="s4">void </span><span class="s1">Exec2([</span><span class="s4">in</span><span class="s1">] BSTR what);</span>
+
+	<span class="s0">/* Some methods that use defaultvalues */</span>
+	<span class="s1">[id(</span><span class="s3">100</span><span class="s1">)]</span>
+		<span class="s4">void </span><span class="s1">do_cy([</span><span class="s4">in</span><span class="s1">, defaultvalue(</span><span class="s3">32.78</span><span class="s1">)] CURRENCY *value);</span>
+
+	<span class="s1">[id(</span><span class="s3">101</span><span class="s1">)]</span>
+		<span class="s4">void </span><span class="s1">do_date([</span><span class="s4">in</span><span class="s1">, defaultvalue(</span><span class="s3">32</span><span class="s1">)] DATE *value);</span>
+<span class="s1">};</span>
+
+<span class="s1">[</span>
+	<span class="s1">uuid(</span><span class="s3">6</span><span class="s1">baa1c79-4ba0-47f2-9ad7-d2ffb1c0f3e3),</span>
+	<span class="s1">version(</span><span class="s3">1.0</span><span class="s1">),</span>
+	<span class="s1">helpstring(</span><span class="s2">&quot;TestDispServer 1.0 Type library&quot;</span><span class="s1">)</span>
+	<span class="s1">]</span>
+<span class="s1">library TestDispServerLib</span>
+<span class="s1">{</span>
+	<span class="s1">importlib(</span><span class="s2">&quot;stdole2.tlb&quot;</span><span class="s1">);</span>
+
+	<span class="s1">[</span>
+		<span class="s1">uuid(bb2aba53-9d42-435b-acc3-ae2c274517b0),</span>
+		<span class="s1">helpstring(</span><span class="s2">&quot;TestDispServer class object&quot;</span><span class="s1">)</span>
+		<span class="s1">]</span>
+		<span class="s1">coclass TestDispServer {</span>
+		<span class="s1">[</span><span class="s4">default</span><span class="s1">] dispinterface DTestDispServer;</span>
+		<span class="s1">[</span><span class="s4">default</span><span class="s1">, source] dispinterface DTestDispServerEvents;</span>
+	<span class="s1">};</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

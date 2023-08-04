@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>w_getopt.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+w_getopt.py</font>
+</center></td></tr></table>
+<pre><span class="s0">class </span><span class="s1">GetoptError(Exception):</span>
+    <span class="s0">pass</span>
+
+<span class="s0">def </span><span class="s1">w_getopt(args</span><span class="s0">, </span><span class="s1">options):</span>
+    <span class="s2">&quot;&quot;&quot;A getopt for Windows. 
+ 
+    Options may start with either '-' or '/', the option names may 
+    have more than one letter (/tlb or -RegServer), and option names 
+    are case insensitive. 
+ 
+    Returns two elements, just as getopt.getopt.  The first is a list 
+    of (option, value) pairs in the same way getopt.getopt does, but 
+    there is no '-' or '/' prefix to the option name, and the option 
+    name is always lower case.  The second is the list of arguments 
+    which do not belong to an option. 
+ 
+    Different from getopt.getopt, a single argument not belonging to an option 
+    does not terminate parsing. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">opts = []</span>
+    <span class="s1">arguments = []</span>
+    <span class="s0">while </span><span class="s1">args:</span>
+        <span class="s0">if </span><span class="s1">args[</span><span class="s3">0</span><span class="s1">][:</span><span class="s3">1</span><span class="s1">] </span><span class="s0">in </span><span class="s4">&quot;/-&quot;</span><span class="s1">:</span>
+            <span class="s1">arg = args[</span><span class="s3">0</span><span class="s1">][</span><span class="s3">1</span><span class="s1">:] </span><span class="s5"># strip the '-' or '/'</span>
+            <span class="s1">arg = arg.lower()</span>
+
+            <span class="s0">if </span><span class="s1">arg + </span><span class="s4">':' </span><span class="s0">in </span><span class="s1">options:</span>
+                <span class="s0">try</span><span class="s1">:</span>
+                    <span class="s1">opts.append((arg</span><span class="s0">, </span><span class="s1">args[</span><span class="s3">1</span><span class="s1">]))</span>
+                <span class="s0">except </span><span class="s1">IndexError:</span>
+                    <span class="s0">raise </span><span class="s1">GetoptError(</span><span class="s4">&quot;option '%s' requires an argument&quot; </span><span class="s1">% args[</span><span class="s3">0</span><span class="s1">])</span>
+                <span class="s1">args = args[</span><span class="s3">1</span><span class="s1">:]</span>
+            <span class="s0">elif </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">options:</span>
+                <span class="s1">opts.append((arg</span><span class="s0">, </span><span class="s4">''</span><span class="s1">))</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">GetoptError(</span><span class="s4">&quot;invalid option '%s'&quot; </span><span class="s1">% args[</span><span class="s3">0</span><span class="s1">])</span>
+            <span class="s1">args = args[</span><span class="s3">1</span><span class="s1">:]</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">arguments.append(args[</span><span class="s3">0</span><span class="s1">])</span>
+            <span class="s1">args = args[</span><span class="s3">1</span><span class="s1">:]</span>
+
+    <span class="s0">return </span><span class="s1">opts</span><span class="s0">, </span><span class="s1">arguments</span>
+
+<span class="s0">if __debug__</span><span class="s1">:</span>
+    <span class="s0">if </span><span class="s1">__name__ == </span><span class="s4">&quot;__main__&quot;</span><span class="s1">:</span>
+        <span class="s0">import </span><span class="s1">unittest</span>
+
+        <span class="s0">class </span><span class="s1">TestCase(unittest.TestCase):</span>
+            <span class="s0">def </span><span class="s1">test_1(self):</span>
+                <span class="s1">args = </span><span class="s4">&quot;-embedding spam /RegServer foo /UnregSERVER blabla&quot;</span><span class="s1">.split()</span>
+                <span class="s1">opts</span><span class="s0">, </span><span class="s1">args = w_getopt(args</span><span class="s0">,</span>
+                                      <span class="s4">&quot;regserver unregserver embedding&quot;</span><span class="s1">.split())</span>
+                <span class="s1">self.assertEqual(opts</span><span class="s0">,</span>
+                                 <span class="s1">[(</span><span class="s4">'embedding'</span><span class="s0">, </span><span class="s4">''</span><span class="s1">)</span><span class="s0">,</span>
+                                  <span class="s1">(</span><span class="s4">'regserver'</span><span class="s0">, </span><span class="s4">''</span><span class="s1">)</span><span class="s0">,</span>
+                                  <span class="s1">(</span><span class="s4">'unregserver'</span><span class="s0">, </span><span class="s4">''</span><span class="s1">)])</span>
+                <span class="s1">self.assertEqual(args</span><span class="s0">, </span><span class="s1">[</span><span class="s4">&quot;spam&quot;</span><span class="s0">, </span><span class="s4">&quot;foo&quot;</span><span class="s0">, </span><span class="s4">&quot;blabla&quot;</span><span class="s1">])</span>
+
+            <span class="s0">def </span><span class="s1">test_2(self):</span>
+                <span class="s1">args = </span><span class="s4">&quot;/TLB Hello.Tlb HELLO.idl&quot;</span><span class="s1">.split()</span>
+                <span class="s1">opts</span><span class="s0">, </span><span class="s1">args = w_getopt(args</span><span class="s0">, </span><span class="s1">[</span><span class="s4">&quot;tlb:&quot;</span><span class="s1">])</span>
+                <span class="s1">self.assertEqual(opts</span><span class="s0">, </span><span class="s1">[(</span><span class="s4">'tlb'</span><span class="s0">, </span><span class="s4">'Hello.Tlb'</span><span class="s1">)])</span>
+                <span class="s1">self.assertEqual(args</span><span class="s0">, </span><span class="s1">[</span><span class="s4">'HELLO.idl'</span><span class="s1">])</span>
+
+            <span class="s0">def </span><span class="s1">test_3(self):</span>
+                <span class="s5"># Invalid option</span>
+                <span class="s1">self.assertRaises(GetoptError</span><span class="s0">, </span><span class="s1">w_getopt</span><span class="s0">,</span>
+                                  <span class="s4">&quot;/TLIB hello.tlb hello.idl&quot;</span><span class="s1">.split()</span><span class="s0">, </span><span class="s1">[</span><span class="s4">&quot;tlb:&quot;</span><span class="s1">])</span>
+
+            <span class="s0">def </span><span class="s1">test_4(self):</span>
+                <span class="s5"># Missing argument</span>
+                <span class="s1">self.assertRaises(GetoptError</span><span class="s0">, </span><span class="s1">w_getopt</span><span class="s0">,</span>
+                                  <span class="s4">&quot;/TLB&quot;</span><span class="s1">.split()</span><span class="s0">, </span><span class="s1">[</span><span class="s4">&quot;tlb:&quot;</span><span class="s1">])</span>
+
+        <span class="s1">unittest.main()</span>
+</pre>
+</body>
+</html>
